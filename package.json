@@ -15,7 +15,7 @@
     "check": "node scripts/check.cjs",
     "test": "node --test",
     "build": "npm run check && npm test && npm run prepare:renderer && electron-builder --dir",
-    "dist": "npm run check && npm test && npm run prepare:renderer && electron-builder --win nsis"
+    "dist": "npm run check && npm test && npm run prepare:renderer && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "ffmpeg-ffprobe-static": "6.1.2-rc.1"
