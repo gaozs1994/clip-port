@@ -198,8 +198,8 @@ class CookieManager {
       status = "invalid";
       message = "Cookie 不完整，请重新登录";
     } else if (hasCredentials && rejectedAfterVerification) {
-      status = "invalid";
-      message = "最近一次解析未通过平台验证";
+      status = "ready";
+      message = "本地 Cookie 完整；上次在线验证未通过，可重试或重新登录";
     } else if (hasCredentials && metadata.lastVerifiedAt) {
       status = "valid";
       message = "已通过真实解析验证";

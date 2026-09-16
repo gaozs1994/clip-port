@@ -19,8 +19,14 @@ test("parse arguments isolate the URL after an option terminator", () => {
   assert.equal(args[args.indexOf("--user-agent") + 1], "ClipPort Test");
 });
 
-test("classifies cookie challenges as an actionable authentication error", () => {
-  const error = classifyError("ERROR: Fresh cookies are needed to access this content");
+test("classifies platform cookie challenges without invalidating login", () => {
+  const error = classifyError("ERROR: [Douyin] Fresh cookies (not necessarily logged in) are needed");
+  assert.equal(error.code, "COOKIE_CHALLENGE");
+  assert.match(error.message, /不代表登录已失效/);
+});
+
+test("classifies explicit sign-in requirements as authentication errors", () => {
+  const error = classifyError("ERROR: Sign in to confirm your identity");
   assert.equal(error.code, "AUTH_REQUIRED");
   assert.match(error.message, /登录状态/);
 });

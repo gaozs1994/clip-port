@@ -74,7 +74,22 @@ test("exports only matched platform cookies and tracks real-use validation", asy
     await manager.markAccepted("https://www.douyin.com/video/1");
     assert.equal((await manager.getStatus("douyin")).status, "valid");
     await manager.markRejected("https://www.douyin.com/video/1");
-    assert.equal((await manager.getStatus("douyin")).status, "invalid");
+    const rejected = await manager.getStatus("douyin");
+    assert.equal(rejected.status, "ready");
+    assert.match(rejected.message, /上次在线验证未通过/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("marks structurally incomplete platform cookies as invalid", async () => {
+  const { directory, manager } = createHarness([
+    { domain: ".douyin.com", path: "/", secure: true, expirationDate: 2_000_000_000, name: "ttwid", value: "device-cookie" },
+  ]);
+  try {
+    const status = await manager.getStatus("douyin");
+    assert.equal(status.status, "invalid");
+    assert.match(status.message, /Cookie 不完整/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

@@ -141,6 +141,13 @@ function parseProgressLine(line) {
 
 function classifyError(stderr = "") {
   const text = stderr.toLowerCase();
+  if (/fresh cookies?\s+\(not necessarily logged in\)\s+(?:are|is) needed/.test(text)) {
+    return new AppError(
+      "COOKIE_CHALLENGE",
+      "平台要求新的访问 Cookie，但这不代表登录已失效。请稍后重试或等待 yt-dlp 更新",
+      stderr,
+    );
+  }
   if (/sign in|log in|login|cookies?|authentication/.test(text)) {
     return new AppError("AUTH_REQUIRED", "该内容需要登录状态。请在设置的“登录状态”中登录对应平台后重试", stderr);
   }
