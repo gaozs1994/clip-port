@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnWithLines, terminateProcessTree } = require("./process-utils.cjs");
 const {
@@ -15,6 +16,7 @@ const {
   sanitizeTaskOptions,
 } = require("./validators.cjs");
 const { buildDownloadArgs, classifyError, parseProgressLine } = require("./yt-dlp.cjs");
+const { buildYtDlpInfo, isDouyinUrl } = require("./douyin-resolver.cjs");
 
 function now() {
   return new Date().toISOString();
@@ -25,11 +27,12 @@ function tail(value, limit = 12_000) {
 }
 
 class TaskManager {
-  constructor({ store, toolchain, safeStorage, cookieManager, onTaskChanged, onHistoryChanged }) {
+  constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, onTaskChanged, onHistoryChanged }) {
     this.store = store;
     this.toolchain = toolchain;
     this.safeStorage = safeStorage;
     this.cookieManager = cookieManager;
+    this.douyinResolver = douyinResolver;
     this.onTaskChanged = onTaskChanged;
     this.onHistoryChanged = onHistoryChanged;
     this.running = new Map();
@@ -96,6 +99,7 @@ class TaskManager {
         extractor: String(media.extractor || "unknown").slice(0, 100),
         duration: Number.isFinite(media.duration) ? media.duration : null,
       },
+      downloadStrategy: media.downloadStrategy === "douyin-share" && isDouyinUrl(sourceUrl) ? "douyin-share" : "",
       redactedUrl: redactUrl(sourceUrl),
       urlFingerprint: fingerprintUrl(sourceUrl),
       sourceUrlEncrypted: this.#encrypt(sourceUrl),
@@ -166,22 +170,42 @@ class TaskManager {
     if (this.stopping || task.state !== "queued") return;
 
     let authContext = null;
-    try {
-      authContext = await this.cookieManager?.createAuthContext(sourceUrl);
-    } catch (error) {
-      this.#save(task, {
-        state: "failed",
-        stage: "无法准备登录状态",
-        error: { code: error.code || "AUTH_ERROR", message: error.message },
-      });
-      return;
+    if (task.downloadStrategy !== "douyin-share") {
+      try {
+        authContext = await this.cookieManager?.createAuthContext(sourceUrl);
+      } catch (error) {
+        this.#save(task, {
+          state: "failed",
+          stage: "无法准备登录状态",
+          error: { code: error.code || "AUTH_ERROR", message: error.message },
+        });
+        return;
+      }
     }
 
     task.attempt += 1;
     task.error = null;
     task.progress = { percent: 0, downloadedBytes: 0, totalBytes: null, speed: null, eta: null };
     this.#save(task, { state: "preparing", stage: "正在准备下载" });
-    const runtimeTask = { ...task, sourceUrl };
+    let infoJsonPath = "";
+    if (task.downloadStrategy === "douyin-share") {
+      try {
+        if (!this.douyinResolver) throw new AppError("DOUYIN_RESOLVER_MISSING", "抖音解析组件不可用");
+        if (task.options.preset === "subtitles") throw new AppError("FORMAT_UNAVAILABLE", "该抖音视频没有可下载的字幕");
+        const resolved = await this.douyinResolver.resolve(sourceUrl, { resolution: task.options.resolution });
+        infoJsonPath = path.join(os.tmpdir(), `clipport-douyin-${task.id}.info.json`);
+        fs.writeFileSync(infoJsonPath, JSON.stringify(buildYtDlpInfo(resolved)), { encoding: "utf8", mode: 0o600 });
+      } catch (error) {
+        if (infoJsonPath) fs.rmSync(infoJsonPath, { force: true });
+        this.#save(task, {
+          state: "failed",
+          stage: error.message || "抖音下载地址解析失败",
+          error: { code: error.code || "DOUYIN_RESOLVE_FAILED", message: error.message || "抖音下载地址解析失败" },
+        });
+        return;
+      }
+    }
+    const runtimeTask = { ...task, sourceUrl, infoJsonPath };
     const context = { reason: "", outputPaths: [], log: "", lastProgressAt: 0, tools, child: null, completion: null };
     const consume = (line) => {
       const event = parseProgressLine(line);
@@ -200,11 +224,23 @@ class TaskManager {
         this.#save(task, { state: "downloading", stage: "正在下载", progress: event.value });
       }
     };
-    const processHandle = spawnWithLines(tools.ytDlpPath, buildDownloadArgs(runtimeTask, { ...tools, ...(authContext || {}) }), {
-      cwd: task.outputRoot,
-      onStdoutLine: consume,
-      onStderrLine: consume,
-    });
+    let processHandle;
+    try {
+      processHandle = spawnWithLines(tools.ytDlpPath, buildDownloadArgs(runtimeTask, { ...tools, ...(authContext || {}) }), {
+        cwd: task.outputRoot,
+        onStdoutLine: consume,
+        onStderrLine: consume,
+      });
+    } catch (error) {
+      authContext?.cleanup();
+      if (infoJsonPath) fs.rmSync(infoJsonPath, { force: true });
+      this.#save(task, {
+        state: "failed",
+        stage: "无法启动下载工具",
+        error: { code: error.code || "PROCESS_ERROR", message: error.message },
+      });
+      return;
+    }
     Object.assign(context, processHandle);
     this.running.set(task.id, context);
     this.launching.delete(task.id);
@@ -238,6 +274,7 @@ class TaskManager {
       });
     } finally {
       authContext?.cleanup();
+      if (infoJsonPath) fs.rmSync(infoJsonPath, { force: true });
       this.running.delete(task.id);
       this.schedule();
     }

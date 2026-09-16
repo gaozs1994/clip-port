@@ -95,7 +95,8 @@ function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
     if (options.writeMetadata) args.push("--embed-metadata");
   }
 
-  args.push("--", task.sourceUrl);
+  if (task.infoJsonPath) args.push("--load-info-json", task.infoJsonPath);
+  else args.push("--", task.sourceUrl);
   return args;
 }
 

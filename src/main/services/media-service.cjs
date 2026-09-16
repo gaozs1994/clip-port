@@ -1,6 +1,7 @@
 const { spawnWithLines, terminateProcessTree } = require("./process-utils.cjs");
 const { AppError, extractHttpUrl } = require("./validators.cjs");
 const { buildParseArgs, classifyError, normalizeInfo } = require("./yt-dlp.cjs");
+const { isDouyinUrl, normalizeDouyinInfo } = require("./douyin-resolver.cjs");
 
 async function thumbnailDataUrl(value) {
   if (!value) return "";
@@ -32,9 +33,11 @@ async function thumbnailDataUrl(value) {
 }
 
 class MediaService {
-  constructor({ toolchain, cookieManager }) {
+  constructor({ toolchain, cookieManager, douyinResolver, spawnProcess = spawnWithLines }) {
     this.toolchain = toolchain;
     this.cookieManager = cookieManager;
+    this.douyinResolver = douyinResolver;
+    this.spawnProcess = spawnProcess;
     this.active = null;
   }
 
@@ -45,11 +48,16 @@ class MediaService {
     const authContext = await this.cookieManager?.createAuthContext(url);
     let processHandle = null;
     try {
-      processHandle = spawnWithLines(tools.ytDlpPath, buildParseArgs({ url, ffmpegPath: tools.ffmpegPath, ...(authContext || {}) }));
+      processHandle = this.spawnProcess(tools.ytDlpPath, buildParseArgs({ url, ffmpegPath: tools.ffmpegPath, ...(authContext || {}) }));
       this.active = processHandle;
       const result = await processHandle.completion;
       if (result.code !== 0) {
         const failure = classifyError(result.stderr);
+        if (failure.code === "COOKIE_CHALLENGE" && this.douyinResolver && isDouyinUrl(url)) {
+          const fallback = await this.douyinResolver.resolve(url, { resolution: "best" });
+          const thumbnail = await thumbnailDataUrl(fallback.thumbnailUrl);
+          return { ...normalizeDouyinInfo(fallback, thumbnail), resolvedUrl: url };
+        }
         if (failure.code === "AUTH_REQUIRED" && authContext) await this.cookieManager?.markRejected(url);
         throw failure;
       }

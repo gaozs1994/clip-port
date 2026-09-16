@@ -54,6 +54,29 @@ test("download arguments map the MP3 preset centrally", () => {
   assert.equal(args.at(-1), "https://example.com/video");
 });
 
+test("download arguments can consume a trusted temporary info document", () => {
+  const infoJsonPath = path.resolve("douyin.info.json");
+  const args = buildDownloadArgs({
+    outputRoot: path.resolve("downloads"),
+    sourceUrl: "https://v.douyin.com/example/",
+    infoJsonPath,
+    options: {
+      preset: "recommended",
+      resolution: "1080",
+      container: "mp4",
+      fps: "60",
+      embedThumbnail: true,
+      writeMetadata: true,
+      audioFormat: "original",
+      audioQuality: "192",
+      subtitleLanguages: [],
+      includeAutomaticSubtitles: false,
+    },
+  }, { ffmpegPath: path.resolve("ffmpeg.exe") });
+  assert.equal(args[args.indexOf("--load-info-json") + 1], infoJsonPath);
+  assert.equal(args.includes("https://v.douyin.com/example/"), false);
+});
+
 test("progress parser handles unknown totals without inventing a percentage", () => {
   const event = parseProgressLine("CLIPPORT_PROGRESS|downloading|2048|NA|NA|1024|8|NA");
   assert.equal(event.type, "progress");
