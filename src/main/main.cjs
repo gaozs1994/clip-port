@@ -13,12 +13,14 @@ const {
   session,
   shell,
 } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { AppStore } = require("./services/store.cjs");
 const { ToolchainManager } = require("./services/toolchain.cjs");
 const { MediaService } = require("./services/media-service.cjs");
 const { TaskManager } = require("./services/task-manager.cjs");
 const { CookieManager } = require("./services/cookie-manager.cjs");
 const { DouyinResolver } = require("./services/douyin-resolver.cjs");
+const { UpdateManager } = require("./services/update-manager.cjs");
 const { AppError, assertTaskId, sanitizeSettingsPatch } = require("./services/validators.cjs");
 
 protocol.registerSchemesAsPrivileged([
@@ -35,6 +37,7 @@ let mediaService = null;
 let taskManager = null;
 let cookieManager = null;
 let douyinResolver = null;
+let updateManager = null;
 let shutdownStarted = false;
 const smokeTest = process.env.CLIPPORT_SMOKE_TEST === "1";
 
@@ -158,6 +161,7 @@ function registerIpc() {
     history: taskManager.history(),
     toolchain: await toolchain.getStatus({ fresh: true }),
     authPlatforms: await cookieManager.list(),
+    updateStatus: updateManager.getStatus(),
   }));
 
   handle("media:parse", ({ url }) => mediaService.parse(url));
@@ -219,6 +223,11 @@ function registerIpc() {
     if (result.response !== 1) return null;
     return cookieManager.clear(platformId);
   });
+
+  handle("updates:status", () => updateManager.getStatus());
+  handle("updates:check", () => updateManager.check());
+  handle("updates:download", () => updateManager.download());
+  handle("updates:install", () => updateManager.install());
 
   handle("files:open", async ({ recordType, id }) => {
     const output = findOutput(recordType, id);
@@ -285,9 +294,23 @@ async function initialize() {
     onTaskChanged: (task) => send("tasks:changed", task),
     onHistoryChanged: (entry) => send("history:changed", entry),
   });
+  updateManager = new UpdateManager({
+    updater: autoUpdater,
+    app,
+    dialog,
+    getParentWindow: () => mainWindow,
+    onStatus: (status) => send("updates:changed", status),
+    beforeInstall: async () => {
+      shutdownStarted = true;
+      updateManager.shutdown();
+      await taskManager.shutdown();
+      cookieManager.shutdown();
+    },
+  });
   registerIpc();
   createWindow();
   taskManager.schedule();
+  updateManager.start();
 }
 
 app.whenReady().then(initialize);
@@ -301,6 +324,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
+  updateManager?.shutdown();
   if (shutdownStarted || !taskManager) return;
   event.preventDefault();
   shutdownStarted = true;

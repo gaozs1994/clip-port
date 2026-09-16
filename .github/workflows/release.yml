@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set release version
+        run: npm version --no-git-tag-version "0.1.${{ github.run_number }}"
+
       - name: Build Windows installer
         run: npm run dist
 
@@ -41,15 +44,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: build-${{ github.run_number }}
         run: |
-          $installer = Get-ChildItem -Path dist -Filter "ClipPort Setup *.exe" |
+          $installer = Get-ChildItem -Path dist -Filter "ClipPort.Setup.*.exe" |
             Where-Object { $_.Name -notlike "*uninstaller*" } |
             Select-Object -First 1
+          $blockmap = Get-ChildItem -Path dist -Filter "ClipPort.Setup.*.exe.blockmap" |
+            Select-Object -First 1
+          $updateManifest = Get-Item -Path "dist/latest.yml" -ErrorAction SilentlyContinue
 
-          if (-not $installer) {
-            throw "Windows installer was not produced."
+          if (-not $installer -or -not $blockmap -or -not $updateManifest) {
+            throw "Installer, blockmap, or update manifest was not produced."
           }
 
-          gh release create $env:RELEASE_TAG $installer.FullName `
+          gh release create $env:RELEASE_TAG $installer.FullName $blockmap.FullName $updateManifest.FullName `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "ClipPort $env:RELEASE_TAG" `

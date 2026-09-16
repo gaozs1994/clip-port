@@ -44,6 +44,12 @@ contextBridge.exposeInMainWorld("clipport", {
     validate: (platformId) => invoke("auth:validate", { platformId }),
     clear: (platformId) => invoke("auth:clear", { platformId }),
   },
+  updates: {
+    status: () => invoke("updates:status"),
+    check: () => invoke("updates:check"),
+    download: () => invoke("updates:download"),
+    install: () => invoke("updates:install"),
+  },
   files: {
     open: (recordType, id) => invoke("files:open", { recordType, id }),
     reveal: (recordType, id) => invoke("files:reveal", { recordType, id }),
@@ -54,5 +60,6 @@ contextBridge.exposeInMainWorld("clipport", {
     onHistoryChanged: (callback) => subscribe("history:changed", callback),
     onToolStatus: (callback) => subscribe("tools:changed", callback),
     onAuthChanged: (callback) => subscribe("auth:changed", callback),
+    onUpdateStatus: (callback) => subscribe("updates:changed", callback),
   },
 });

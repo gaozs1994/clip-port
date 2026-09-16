@@ -32,6 +32,7 @@
     tasks: [],
     history: [],
     authPlatforms: [],
+    updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, message: "启动后自动检查更新" },
     preset: "recommended",
     taskFilter: "all",
     parsing: false,
@@ -73,7 +74,7 @@
   }
 
   function createDemoApi() {
-    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set() };
+    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set(), update: new Set() };
     const demoSettings = { downloadDirectory: "C:\\Users\\Public\\Downloads\\ClipPort", concurrency: 2, theme: "dark", toolPaths: {} };
     const demoTools = {
       ready: true,
@@ -91,10 +92,12 @@
       { id: "youtube", name: "YouTube", domain: "youtube.com", status: "not_connected", message: "未检测到登录状态", cookieCount: 0, expiresAt: "", lastCheckedAt: "", lastVerifiedAt: "" },
       { id: "xiaohongshu", name: "小红书", domain: "xiaohongshu.com", status: "invalid", message: "Cookie 不完整，请重新登录", cookieCount: 2, expiresAt: "", lastCheckedAt: new Date().toISOString(), lastVerifiedAt: "" },
     ];
+    let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, message: "可手动检查更新" };
     let timer = null;
 
     const emitTask = (task) => listeners.task.forEach((callback) => callback(structuredClone(task)));
     const emitAuth = (platform) => listeners.auth.forEach((callback) => callback(structuredClone(platform)));
+    const emitUpdate = () => listeners.update.forEach((callback) => callback(structuredClone(demoUpdateStatus)));
     const findDemoAuth = (platformId) => demoAuthPlatforms.find((platform) => platform.id === platformId);
     const progressDemo = (task) => {
       if (timer) clearInterval(timer);
@@ -118,7 +121,7 @@
 
     return {
       app: {
-        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms }),
+        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms, updateStatus: demoUpdateStatus }),
         minimize: () => {}, toggleMaximize: () => {}, close: () => {},
       },
       clipboard: { readText: async () => ({ ok: true, data: await navigator.clipboard?.readText().catch(() => "") || "" }) },
@@ -168,12 +171,22 @@
           return ok(structuredClone(platform));
         },
       },
+      updates: {
+        status: () => ok(structuredClone(demoUpdateStatus)),
+        check: async () => {
+          demoUpdateStatus = { ...demoUpdateStatus, status: "checking", message: "正在检查新版本" }; emitUpdate(); await sleep(450);
+          demoUpdateStatus = { ...demoUpdateStatus, status: "current", message: "已是最新版本" }; emitUpdate(); return ok(structuredClone(demoUpdateStatus));
+        },
+        download: () => ok(structuredClone(demoUpdateStatus)),
+        install: () => ok(false),
+      },
       files: { open: () => ok(true), reveal: () => ok(true), openDownloadDirectory: () => ok(true) },
       events: {
         onTaskChanged: (callback) => { listeners.task.add(callback); return () => listeners.task.delete(callback); },
         onHistoryChanged: (callback) => { listeners.history.add(callback); return () => listeners.history.delete(callback); },
         onToolStatus: (callback) => { listeners.tool.add(callback); return () => listeners.tool.delete(callback); },
         onAuthChanged: (callback) => { listeners.auth.add(callback); return () => listeners.auth.delete(callback); },
+        onUpdateStatus: (callback) => { listeners.update.add(callback); return () => listeners.update.delete(callback); },
       },
     };
   }
@@ -557,8 +570,28 @@
     $("#concurrencySelect").value = String(state.settings.concurrency || 2);
     $("#themeSelect").value = state.settings.theme || "system";
     $("#appVersion").textContent = state.appVersion;
+    renderUpdateStatus();
     renderAuthPlatforms();
     renderToolchain();
+  }
+
+  function renderUpdateStatus() {
+    const status = state.updateStatus || {};
+    const statusNode = $("#updateStatus");
+    const button = $("#checkUpdates");
+    if (!statusNode || !button) return;
+
+    statusNode.textContent = status.message || "可手动检查更新";
+    const buttonLabel = $("span", button);
+    const busy = status.status === "checking" || status.status === "downloading";
+    button.disabled = busy || status.status === "disabled";
+    button.toggleAttribute("aria-busy", busy);
+    if (status.status === "checking") buttonLabel.textContent = "正在检查";
+    else if (status.status === "downloading") buttonLabel.textContent = `下载中 ${Math.round(status.progress || 0)}%`;
+    else if (status.status === "available") buttonLabel.textContent = "下载更新";
+    else if (status.status === "downloaded") buttonLabel.textContent = "重启安装";
+    else if (status.status === "disabled") buttonLabel.textContent = "仅安装版支持";
+    else buttonLabel.textContent = "检查更新";
   }
 
   function upsertTask(task) {
@@ -685,6 +718,22 @@
     finally { $("#checkTools").disabled = false; }
   }
 
+  async function handleUpdateAction() {
+    const status = state.updateStatus?.status;
+    const method = status === "available" ? "download" : status === "downloaded" ? "install" : "check";
+    try {
+      const result = await call(api.updates[method]());
+      if (result && typeof result === "object") {
+        state.updateStatus = result;
+        renderUpdateStatus();
+      }
+      if (state.updateStatus?.status === "current") showToast("已是最新版本", `当前版本 ${state.appVersion}`);
+      else if (state.updateStatus?.status === "error") showToast("检查更新失败", state.updateStatus.message, "error");
+    } catch (error) {
+      showToast(method === "download" ? "更新下载失败" : "检查更新失败", error.message, "error");
+    }
+  }
+
   async function handleAuthAction(button) {
     const { authAction: action, platformId } = button.dataset;
     const platform = state.authPlatforms.find((item) => item.id === platformId);
@@ -758,6 +807,7 @@
     $("#closeToast").addEventListener("click", () => $("#toast").classList.remove("show"));
     $("#openFolder").addEventListener("click", () => call(api.files.openDownloadDirectory()).catch((error) => showToast("无法打开目录", error.message, "error")));
     $("#checkTools").addEventListener("click", () => refreshTools(true));
+    $("#checkUpdates").addEventListener("click", handleUpdateAction);
     $("#chooseDirectory").addEventListener("click", async () => { try { const settings = await call(api.settings.chooseDownloadDirectory()); if (settings) { state.settings = settings; renderSettings(); showToast("默认目录已更新"); } } catch (error) { showToast("无法选择目录", error.message, "error"); } });
     $("#concurrencySelect").addEventListener("change", (event) => updateSettings({ concurrency: Number(event.target.value) }));
     $("#themeSelect").addEventListener("change", (event) => updateSettings({ theme: event.target.value }));
@@ -785,6 +835,10 @@
         else if (status?.message) showToast("工具链", status.message);
       });
       api.events.onAuthChanged?.(upsertAuthPlatform);
+      api.events.onUpdateStatus?.((status) => {
+        state.updateStatus = status;
+        renderUpdateStatus();
+      });
       window.__clipportState = state;
     } catch (error) {
       showToast("ClipPort 启动失败", error.message, "error");
