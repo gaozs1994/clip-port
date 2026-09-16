@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.playwright-cli/
+output/
+tools/
+*.log
+.DS_Store
+Thumbs.db
+
+# HyperFrames local caches and generated media
+clipport-promo/.hyperframes/
+clipport-promo/.thumbnails/
+clipport-promo/.waveform-cache/
+clipport-promo/renders/
+clipport-promo/snapshots/

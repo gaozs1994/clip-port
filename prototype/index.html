@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="ClipPort 视频解析与下载桌面工具交互原型"
+    />
+    <title>ClipPort - 视频解析工具原型</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/clipport-icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-theme="light">
+    <div class="app-shell" id="appShell">
+      <header class="window-bar">
+        <a class="brand" href="#download" data-nav="download" aria-label="ClipPort 下载首页">
+          <span class="brand-mark" aria-hidden="true"><img src="./assets/clipport-icon.svg" alt="" /></span>
+          <span class="brand-name">ClipPort</span>
+        </a>
+
+        <div class="window-drag-region" aria-hidden="true"></div>
+
+        <div class="window-actions">
+          <button class="icon-button" id="themeToggle" type="button" aria-label="切换深色主题" title="切换主题">
+            <i data-lucide="moon"></i>
+          </button>
+          <span class="window-divider" aria-hidden="true"></span>
+          <button class="window-button" type="button" aria-label="最小化" title="最小化"><i data-lucide="minus"></i></button>
+          <button class="window-button" type="button" aria-label="最大化" title="最大化"><i data-lucide="square"></i></button>
+          <button class="window-button close" type="button" aria-label="关闭" title="关闭"><i data-lucide="x"></i></button>
+        </div>
+      </header>
+
+      <div class="app-layout">
+        <aside class="sidebar" aria-label="主导航">
+          <nav class="primary-nav">
+            <button class="nav-item active" type="button" data-nav="download" aria-current="page">
+              <i data-lucide="download"></i><span>下载</span>
+            </button>
+            <button class="nav-item" type="button" data-nav="tasks">
+              <i data-lucide="list-checks"></i><span>任务</span><span class="nav-count" id="navTaskCount">3</span>
+            </button>
+            <button class="nav-item" type="button" data-nav="history">
+              <i data-lucide="history"></i><span>历史</span>
+            </button>
+            <button class="nav-item" type="button" data-nav="settings">
+              <i data-lucide="settings-2"></i><span>设置</span>
+            </button>
+          </nav>
+
+          <div class="engine-status">
+            <div class="engine-head">
+              <span>解析引擎</span>
+              <span class="status-dot" aria-label="运行正常"></span>
+            </div>
+            <dl>
+              <div><dt>yt-dlp</dt><dd>2026.09.12</dd></div>
+              <div><dt>FFmpeg</dt><dd>8.0</dd></div>
+            </dl>
+            <button type="button" class="text-button" id="checkUpdates">检查更新</button>
+          </div>
+        </aside>
+
+        <main class="workspace" id="workspace">
+          <section class="view active" id="downloadView" data-view="download" aria-labelledby="downloadTitle">
+            <div class="page-header">
+              <div>
+                <p class="eyebrow">新建任务</p>
+                <h1 id="downloadTitle">下载媒体</h1>
+              </div>
+              <button class="secondary-button compact" type="button" id="pasteTopButton" aria-label="粘贴媒体链接">
+                <i data-lucide="clipboard"></i><span>粘贴链接</span>
+              </button>
+            </div>
+
+            <form class="source-form" id="parseForm">
+              <label for="sourceUrl">媒体链接</label>
+              <div class="url-field">
+                <textarea id="sourceUrl" name="sourceUrl" rows="2" spellcheck="false">https://video.example.com/watch/nordic-light</textarea>
+                <button class="field-action" type="button" id="pasteButton" aria-label="从剪贴板粘贴" title="粘贴链接">
+                  <i data-lucide="clipboard-paste"></i>
+                </button>
+              </div>
+              <div class="source-actions">
+                <div class="source-hints" aria-live="polite" id="parseHint">
+                  <span><i data-lucide="shield-check"></i>本机解析</span>
+                  <span><i data-lucide="list-video"></i>检测到单个视频</span>
+                </div>
+                <button class="primary-button" type="submit" id="parseButton">
+                  <i data-lucide="scan-search"></i><span>解析链接</span>
+                </button>
+              </div>
+            </form>
+
+            <section class="result-panel" id="resultPanel" aria-labelledby="resultTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">解析结果</p>
+                  <h2 id="resultTitle">选择下载方案</h2>
+                </div>
+                <span class="success-label"><i data-lucide="circle-check"></i>解析完成</span>
+              </div>
+
+              <div class="media-summary">
+                <figure class="media-thumbnail">
+                  <img
+                    src="https://images.unsplash.com/photo-1584136779221-6b58314700d0?auto=format&amp;fit=crop&amp;w=960&amp;q=82"
+                    alt="雪山与湖泊的旅行纪录片示例封面"
+                  />
+                  <span class="duration">18:42</span>
+                </figure>
+                <div class="media-copy">
+                  <div class="media-source"><span class="source-badge">VIDEO</span><span>Northbound Studio</span></div>
+                  <h3>沿着北纬 68°：峡湾、公路与极昼</h3>
+                  <p>4K 旅行纪录片 · 2026-08-24 · 128 万次观看</p>
+                  <dl class="media-facts">
+                    <div><dt>最高画质</dt><dd>2160p · 60fps</dd></div>
+                    <div><dt>字幕</dt><dd>中文、English</dd></div>
+                    <div><dt>预计大小</dt><dd>约 1.8 GB</dd></div>
+                  </dl>
+                </div>
+              </div>
+
+              <div class="preset-section">
+                <div class="inline-heading">
+                  <h3>下载预设</h3>
+                  <button class="text-button" type="button" id="resetPreset">恢复推荐</button>
+                </div>
+                <div class="preset-grid" role="radiogroup" aria-label="下载预设">
+                  <button class="preset-option selected" type="button" role="radio" aria-checked="true" data-preset="推荐视频">
+                    <span class="preset-icon"><i data-lucide="sparkles"></i></span>
+                    <span><strong>推荐视频</strong><small>1440p · MP4 · 合并</small></span>
+                    <i class="check-icon" data-lucide="check"></i>
+                  </button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="原始最佳">
+                    <span class="preset-icon"><i data-lucide="maximize-2"></i></span>
+                    <span><strong>原始最佳</strong><small>2160p · WebM · 合并</small></span>
+                    <i class="check-icon" data-lucide="check"></i>
+                  </button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="兼容 MP4">
+                    <span class="preset-icon orange"><i data-lucide="monitor-play"></i></span>
+                    <span><strong>兼容 MP4</strong><small>1080p · H.264 · 转码</small></span>
+                    <i class="check-icon" data-lucide="check"></i>
+                  </button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="仅音频">
+                    <span class="preset-icon blue"><i data-lucide="music-2"></i></span>
+                    <span><strong>仅音频</strong><small>M4A · 原始音质</small></span>
+                    <i class="check-icon" data-lucide="check"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="options-section">
+                <div class="option-tabs" role="tablist" aria-label="下载选项">
+                  <button class="option-tab active" type="button" role="tab" aria-selected="true" data-option-tab="video">视频</button>
+                  <button class="option-tab" type="button" role="tab" aria-selected="false" data-option-tab="audio">音频</button>
+                  <button class="option-tab" type="button" role="tab" aria-selected="false" data-option-tab="subtitle">字幕</button>
+                </div>
+
+                <div class="option-content active" id="videoOptions" data-option-panel="video">
+                  <label class="control-field">
+                    <span>分辨率上限</span>
+                    <select id="resolutionSelect">
+                      <option>1440p</option>
+                      <option>2160p</option>
+                      <option>1080p</option>
+                      <option>720p</option>
+                    </select>
+                  </label>
+                  <label class="control-field">
+                    <span>容器</span>
+                    <select><option>MP4</option><option>MKV</option><option>WebM</option></select>
+                  </label>
+                  <label class="control-field">
+                    <span>帧率</span>
+                    <select><option>最高 60fps</option><option>最高 30fps</option><option>自动</option></select>
+                  </label>
+                  <label class="check-control"><input type="checkbox" checked /><span class="check-box"><i data-lucide="check"></i></span><span>嵌入封面</span></label>
+                </div>
+
+                <div class="option-content" id="audioOptions" data-option-panel="audio" hidden>
+                  <label class="control-field">
+                    <span>音频格式</span>
+                    <select><option>原始音频</option><option>M4A</option><option>Opus</option><option>MP3</option></select>
+                  </label>
+                  <label class="control-field">
+                    <span>音轨</span>
+                    <select><option>原始语言 · AAC</option><option>English · AAC</option></select>
+                  </label>
+                  <label class="check-control"><input type="checkbox" checked /><span class="check-box"><i data-lucide="check"></i></span><span>写入媒体信息</span></label>
+                </div>
+
+                <div class="option-content" id="subtitleOptions" data-option-panel="subtitle" hidden>
+                  <label class="control-field">
+                    <span>字幕语言</span>
+                    <select><option>简体中文</option><option>English</option><option>全部可用字幕</option></select>
+                  </label>
+                  <label class="control-field">
+                    <span>输出方式</span>
+                    <select><option>嵌入并保留 SRT</option><option>仅嵌入</option><option>仅保留文件</option></select>
+                  </label>
+                  <label class="check-control"><input type="checkbox" /><span class="check-box"><i data-lucide="check"></i></span><span>包含自动字幕</span></label>
+                </div>
+              </div>
+            </section>
+
+            <div class="download-bar">
+              <button class="destination-button" type="button" id="destinationButton">
+                <i data-lucide="folder-open"></i>
+                <span><small>保存到</small><strong>D:\Media\ClipPort</strong></span>
+                <i data-lucide="chevron-right"></i>
+              </button>
+              <div class="download-summary"><span id="selectedPreset">推荐视频</span><strong>约 982 MB</strong></div>
+              <button class="primary-button large" type="button" id="downloadButton">
+                <i data-lucide="download"></i><span>开始下载</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="view" id="tasksView" data-view="tasks" aria-labelledby="tasksTitle" hidden>
+            <div class="page-header">
+              <div><p class="eyebrow">任务中心</p><h1 id="tasksTitle">下载任务</h1></div>
+              <div class="header-actions">
+                <button class="secondary-button compact" type="button" id="pauseAll" aria-label="全部暂停"><i data-lucide="pause"></i><span>全部暂停</span></button>
+                <button class="primary-button compact" type="button" data-nav="download"><i data-lucide="plus"></i><span>新建下载</span></button>
+              </div>
+            </div>
+
+            <div class="metric-strip" aria-label="任务摘要">
+              <div><span>进行中</span><strong>2</strong></div>
+              <div><span>等待中</span><strong>1</strong></div>
+              <div><span>今日完成</span><strong>12</strong></div>
+              <div><span>实时速度</span><strong>18.6 <small>MB/s</small></strong></div>
+            </div>
+
+            <div class="toolbar-row">
+              <div class="filter-tabs" role="tablist" aria-label="任务筛选">
+                <button class="filter-tab active" type="button">全部 3</button>
+                <button class="filter-tab" type="button">进行中 2</button>
+                <button class="filter-tab" type="button">等待 1</button>
+                <button class="filter-tab" type="button">失败 0</button>
+              </div>
+              <button class="icon-button bordered" type="button" aria-label="更多任务操作" title="更多操作"><i data-lucide="ellipsis"></i></button>
+            </div>
+
+            <div class="task-table" id="taskTable">
+              <div class="task-table-head" aria-hidden="true"><span>名称</span><span>状态</span><span>大小</span><span>操作</span></div>
+              <article class="task-row" data-state="active">
+                <div class="task-name-cell"><span class="file-type teal"><i data-lucide="file-video-2"></i></span><span><strong>沿着北纬 68°：峡湾、公路与极昼</strong><small>1440p · MP4 · 18:42</small></span></div>
+                <div class="task-status-cell"><div><span>下载中 · 68%</span><span>12.8 MB/s</span></div><div class="progress-track"><span style="width:68%"></span></div></div>
+                <div class="task-size-cell"><strong>664 MB</strong><small>约 982 MB</small></div>
+                <div class="task-actions-cell"><button class="icon-button bordered task-pause" type="button" aria-label="暂停下载" title="暂停"><i data-lucide="pause"></i></button><button class="icon-button bordered danger-hover task-remove" type="button" aria-label="取消下载" title="取消"><i data-lucide="x"></i></button></div>
+              </article>
+              <article class="task-row" data-state="processing">
+                <div class="task-name-cell"><span class="file-type orange"><i data-lucide="file-video-2"></i></span><span><strong>从网格到设计系统：完整工作流</strong><small>1080p · MP4 · 42:05</small></span></div>
+                <div class="task-status-cell"><div><span>正在合并音视频</span><span>FFmpeg</span></div><div class="progress-track processing"><span></span></div></div>
+                <div class="task-size-cell"><strong>1.24 GB</strong><small>处理中</small></div>
+                <div class="task-actions-cell"><button class="icon-button bordered task-pause" type="button" aria-label="暂停处理" title="暂停"><i data-lucide="pause"></i></button><button class="icon-button bordered danger-hover task-remove" type="button" aria-label="取消处理" title="取消"><i data-lucide="x"></i></button></div>
+              </article>
+              <article class="task-row" data-state="queued">
+                <div class="task-name-cell"><span class="file-type blue"><i data-lucide="music-2"></i></span><span><strong>城市漫游 Vol.27：雨后的东京</strong><small>M4A · 原始音质 · 52:31</small></span></div>
+                <div class="task-status-cell"><div><span>等待中</span><span>队列第 1 位</span></div><div class="progress-track"><span style="width:0%"></span></div></div>
+                <div class="task-size-cell"><strong>--</strong><small>约 88 MB</small></div>
+                <div class="task-actions-cell"><button class="icon-button bordered" type="button" aria-label="立即开始" title="立即开始"><i data-lucide="play"></i></button><button class="icon-button bordered danger-hover task-remove" type="button" aria-label="移除任务" title="移除"><i data-lucide="x"></i></button></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="historyView" data-view="history" aria-labelledby="historyTitle" hidden>
+            <div class="page-header">
+              <div><p class="eyebrow">本地记录</p><h1 id="historyTitle">下载历史</h1></div>
+              <button class="secondary-button compact" type="button" id="openFolder" aria-label="打开下载目录"><i data-lucide="folder-open"></i><span>打开下载目录</span></button>
+            </div>
+
+            <div class="history-toolbar">
+              <label class="search-field"><i data-lucide="search"></i><span class="sr-only">搜索历史</span><input type="search" id="historySearch" placeholder="搜索标题或来源" /></label>
+              <label class="compact-select"><span class="sr-only">内容类型</span><select><option>全部类型</option><option>视频</option><option>音频</option><option>字幕</option></select></label>
+              <label class="compact-select"><span class="sr-only">完成时间</span><select><option>最近 30 天</option><option>今天</option><option>本周</option><option>全部时间</option></select></label>
+            </div>
+
+            <div class="history-list" id="historyList">
+              <article class="history-row" data-search="沿着北纬 68 峡湾 公路 极昼 northbound studio">
+                <span class="history-thumb"><img src="https://images.unsplash.com/photo-1584136779221-6b58314700d0?auto=format&amp;fit=crop&amp;w=320&amp;q=76" alt="雪山湖泊视频封面" /></span>
+                <div class="history-main"><strong>沿着北纬 68°：峡湾、公路与极昼</strong><span>Northbound Studio · 今天 11:42</span></div>
+                <div class="history-format"><strong>MP4 · 1440p</strong><span>982 MB</span></div>
+                <span class="completed-state"><i data-lucide="circle-check"></i>已完成</span>
+                <div class="history-actions"><button class="secondary-button compact" type="button"><i data-lucide="play"></i><span>打开</span></button><button class="icon-button bordered" type="button" aria-label="打开所在目录" title="打开所在目录"><i data-lucide="folder-open"></i></button><button class="icon-button bordered" type="button" aria-label="更多历史操作" title="更多操作"><i data-lucide="ellipsis"></i></button></div>
+              </article>
+              <article class="history-row" data-search="无人机视角 冰岛 黑沙滩 aerial archive">
+                <span class="history-thumb graphic-thumb coral"><i data-lucide="mountain-snow"></i></span>
+                <div class="history-main"><strong>无人机视角：冰岛黑沙滩与海蚀柱</strong><span>Aerial Archive · 昨天 19:08</span></div>
+                <div class="history-format"><strong>MKV · 2160p</strong><span>2.4 GB</span></div>
+                <span class="completed-state"><i data-lucide="circle-check"></i>已完成</span>
+                <div class="history-actions"><button class="secondary-button compact" type="button"><i data-lucide="play"></i><span>打开</span></button><button class="icon-button bordered" type="button" aria-label="打开所在目录" title="打开所在目录"><i data-lucide="folder-open"></i></button><button class="icon-button bordered" type="button" aria-label="更多历史操作" title="更多操作"><i data-lucide="ellipsis"></i></button></div>
+              </article>
+              <article class="history-row" data-search="产品播客 设计决策 product signals">
+                <span class="history-thumb graphic-thumb navy"><i data-lucide="audio-lines"></i></span>
+                <div class="history-main"><strong>Product Signals #42：如何记录设计决策</strong><span>Product Signals · 2026-09-14 08:31</span></div>
+                <div class="history-format"><strong>M4A · 192 kbps</strong><span>86 MB</span></div>
+                <span class="completed-state"><i data-lucide="circle-check"></i>已完成</span>
+                <div class="history-actions"><button class="secondary-button compact" type="button"><i data-lucide="play"></i><span>打开</span></button><button class="icon-button bordered" type="button" aria-label="打开所在目录" title="打开所在目录"><i data-lucide="folder-open"></i></button><button class="icon-button bordered" type="button" aria-label="更多历史操作" title="更多操作"><i data-lucide="ellipsis"></i></button></div>
+              </article>
+            </div>
+            <p class="empty-state" id="historyEmpty" hidden>没有匹配的下载记录</p>
+          </section>
+
+          <section class="view" id="settingsView" data-view="settings" aria-labelledby="settingsTitle" hidden>
+            <div class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="settingsTitle">设置</h1></div><span class="autosave-label"><i data-lucide="check"></i>自动保存</span></div>
+
+            <div class="settings-layout">
+              <nav class="settings-nav" aria-label="设置分类">
+                <button class="active" type="button">下载</button><button type="button">网络</button><button type="button">认证</button><button type="button">工具链</button><button type="button">隐私</button>
+              </nav>
+              <div class="settings-content">
+                <section class="settings-group" aria-labelledby="generalSettings">
+                  <div class="settings-heading"><h2 id="generalSettings">下载偏好</h2><p>应用于之后创建的任务</p></div>
+                  <div class="setting-row"><div><strong>默认保存位置</strong><span>D:\Media\ClipPort</span></div><button class="secondary-button compact" type="button">更改</button></div>
+                  <label class="setting-row"><div><strong>同时下载任务</strong><span>任务并发与分片并发独立计算</span></div><select><option>2 个任务</option><option>1 个任务</option><option>3 个任务</option></select></label>
+                  <label class="setting-row"><div><strong>文件冲突</strong><span>目标目录已有同名文件时</span></div><select><option>自动编号</option><option>每次询问</option><option>跳过</option></select></label>
+                </section>
+
+                <section class="settings-group" aria-labelledby="behaviorSettings">
+                  <div class="settings-heading"><h2 id="behaviorSettings">任务行为</h2></div>
+                  <label class="setting-row"><div><strong>解析后自动选择推荐预设</strong><span>仍可在下载前修改</span></div><span class="switch"><input type="checkbox" checked /><span></span></span></label>
+                  <label class="setting-row"><div><strong>下载完成后校验媒体文件</strong><span>使用 ffprobe 读取容器与码流</span></div><span class="switch"><input type="checkbox" checked /><span></span></span></label>
+                  <label class="setting-row"><div><strong>完成后显示系统通知</strong><span>失败任务始终通知</span></div><span class="switch"><input type="checkbox" /><span></span></span></label>
+                </section>
+
+                <section class="settings-group" aria-labelledby="toolSettings">
+                  <div class="settings-heading"><h2 id="toolSettings">工具链</h2><span class="success-label"><i data-lucide="circle-check"></i>全部可用</span></div>
+                  <div class="tool-row"><span class="tool-icon"><i data-lucide="square-terminal"></i></span><div><strong>yt-dlp</strong><span>2026.09.12 · Stable</span></div><button class="text-button tool-action" type="button">管理版本</button></div>
+                  <div class="tool-row"><span class="tool-icon orange"><i data-lucide="audio-waveform"></i></span><div><strong>FFmpeg / ffprobe</strong><span>8.0 · 内置版本</span></div><button class="text-button tool-action" type="button">运行自检</button></div>
+                </section>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <aside class="queue-panel" aria-labelledby="queueTitle">
+          <div class="queue-header">
+            <div><p class="eyebrow">实时队列</p><h2 id="queueTitle">活动任务 <span id="queueCount">3</span></h2></div>
+            <button class="icon-button bordered" type="button" aria-label="更多队列操作" title="更多操作"><i data-lucide="ellipsis"></i></button>
+          </div>
+
+          <div class="speed-summary">
+            <span class="speed-icon"><i data-lucide="gauge"></i></span>
+            <span><small>总下载速度</small><strong>18.6 MB/s</strong></span>
+            <span class="network-state">稳定</span>
+          </div>
+
+          <div class="queue-list" id="queueList">
+            <article class="queue-task" data-task-id="north">
+              <div class="queue-task-head">
+                <span class="mini-thumb"><img src="https://images.unsplash.com/photo-1584136779221-6b58314700d0?auto=format&amp;fit=crop&amp;w=180&amp;q=70" alt="雪山湖泊缩略图" /></span>
+                <span class="queue-task-copy"><strong>沿着北纬 68°：峡湾、公路与极昼</strong><small class="task-state-label">下载中 · 12.8 MB/s</small></span>
+                <button class="icon-button task-toggle" type="button" aria-label="暂停沿着北纬 68°" title="暂停"><i data-lucide="pause"></i></button>
+              </div>
+              <div class="progress-meta"><span class="progress-percent">68%</span><span>664 MB / 982 MB · 00:24</span></div>
+              <div class="progress-track"><span class="progress-value" style="width:68%"></span></div>
+            </article>
+
+            <article class="queue-task" data-task-id="design">
+              <div class="queue-task-head">
+                <span class="mini-thumb graphic-thumb coral"><i data-lucide="panels-top-left"></i></span>
+                <span class="queue-task-copy"><strong>从网格到设计系统：完整工作流</strong><small>正在合并音视频</small></span>
+                <button class="icon-button queue-remove" type="button" aria-label="取消合并" title="取消"><i data-lucide="x"></i></button>
+              </div>
+              <div class="progress-meta"><span>FFmpeg</span><span>1.24 GB</span></div>
+              <div class="progress-track processing"><span></span></div>
+            </article>
+
+            <article class="queue-task queued" data-task-id="tokyo">
+              <div class="queue-task-head">
+                <span class="mini-thumb graphic-thumb navy"><i data-lucide="music-2"></i></span>
+                <span class="queue-task-copy"><strong>城市漫游 Vol.27：雨后的东京</strong><small>等待中 · 队列第 1 位</small></span>
+                <button class="icon-button queue-remove" type="button" aria-label="从队列移除" title="移除"><i data-lucide="x"></i></button>
+              </div>
+              <div class="queue-tags"><span>M4A</span><span>原始音质</span><span>约 88 MB</span></div>
+            </article>
+          </div>
+
+          <button class="queue-footer" type="button" data-nav="tasks"><span>查看全部任务</span><i data-lucide="arrow-right"></i></button>
+        </aside>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true">
+      <span class="toast-icon"><i data-lucide="circle-check"></i></span>
+      <span><strong id="toastTitle">任务已加入队列</strong><small id="toastMessage">下载将在可用时自动开始</small></span>
+      <button class="icon-button" type="button" id="closeToast" aria-label="关闭通知"><i data-lucide="x"></i></button>
+    </div>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

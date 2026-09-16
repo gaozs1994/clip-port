@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "preferences": {
+    "destination": {
+      "value": "desktop-product-showcase",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:47.010Z"
+    },
+    "aspect": {
+      "value": "1920x1080",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:47.442Z"
+    },
+    "language": {
+      "value": "zh-CN",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:47.842Z"
+    },
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:48.263Z"
+    },
+    "storyboard": {
+      "value": "no",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:48.620Z"
+    },
+    "style_preset.product-launch-video": {
+      "value": "blue-professional",
+      "confirmed_in": [
+        "clipport-promo"
+      ],
+      "updated_at": "2026-09-16T06:58:48.935Z"
+    }
+  },
+  "sightings": {}
+}

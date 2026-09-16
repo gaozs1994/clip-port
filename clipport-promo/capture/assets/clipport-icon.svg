@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ClipPort app icon</title>
+  <desc id="desc">A white C-shaped media port surrounding an orange play symbol on teal.</desc>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#0F766E"/>
+  <path
+    d="M356 142c-29-22-64-34-100-34-82 0-148 66-148 148s66 148 148 148c37 0 71-12 100-34"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-linecap="round"
+    stroke-width="44"
+  />
+  <path d="M232 188l116 68-116 68z" fill="#F97316"/>
+</svg>

@@ -1,0 +1,61 @@
+{
+  "name": "clipport",
+  "version": "0.1.0",
+  "description": "Local video parsing and download desktop application powered by yt-dlp and FFmpeg.",
+  "author": "ClipPort",
+  "main": "src/main/main.cjs",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "prepare:renderer": "node scripts/vendor-assets.cjs",
+    "postinstall": "node scripts/vendor-assets.cjs",
+    "start": "npm run prepare:renderer && electron .",
+    "dev": "npm start",
+    "smoke": "npm run prepare:renderer && electron scripts/electron-smoke.cjs",
+    "check": "node scripts/check.cjs",
+    "test": "node --test",
+    "build": "npm run check && npm test && npm run prepare:renderer && electron-builder --dir",
+    "dist": "npm run check && npm test && npm run prepare:renderer && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "ffmpeg-ffprobe-static": "6.1.2-rc.1"
+  },
+  "devDependencies": {
+    "electron": "44.4.1",
+    "electron-builder": "26.15.3",
+    "lucide": "1.46.0"
+  },
+  "build": {
+    "appId": "app.clipport.desktop",
+    "productName": "ClipPort",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-ffprobe-static/**/*"
+    ],
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

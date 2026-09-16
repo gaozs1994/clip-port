@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="ClipPort 本地视频解析与下载工具" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>ClipPort</title>
+    <link rel="icon" type="image/svg+xml" href="./assets/clipport-icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-theme="dark">
+    <div class="app-shell" id="appShell">
+      <header class="window-bar">
+        <button class="brand" type="button" data-nav="download" aria-label="ClipPort 下载首页">
+          <span class="brand-mark" aria-hidden="true"><img src="./assets/clipport-icon.svg" alt="" /></span><span class="brand-name">ClipPort</span>
+        </button>
+        <div class="window-drag-region" aria-hidden="true"></div>
+        <div class="window-actions">
+          <button class="toolchain-alert" id="toolchainAlert" type="button" data-nav="settings" hidden><i data-lucide="triangle-alert"></i><span>工具链需要处理</span></button>
+          <button class="icon-button" id="themeToggle" type="button" aria-label="切换深色主题" title="切换主题"><i data-lucide="moon"></i></button>
+          <span class="window-divider" aria-hidden="true"></span>
+          <button class="window-button" id="minimizeButton" type="button" aria-label="最小化" title="最小化"><i data-lucide="minus"></i></button>
+          <button class="window-button" id="maximizeButton" type="button" aria-label="最大化" title="最大化"><i data-lucide="square"></i></button>
+          <button class="window-button close" id="closeButton" type="button" aria-label="关闭" title="关闭"><i data-lucide="x"></i></button>
+        </div>
+      </header>
+
+      <div class="app-layout">
+        <aside class="sidebar" aria-label="主导航">
+          <nav class="primary-nav">
+            <button class="nav-item active" type="button" data-nav="download" aria-current="page"><i data-lucide="download"></i><span>下载</span></button>
+            <button class="nav-item" type="button" data-nav="tasks"><i data-lucide="list-checks"></i><span>任务</span><span class="nav-count" id="navTaskCount" hidden>0</span></button>
+            <button class="nav-item" type="button" data-nav="history"><i data-lucide="history"></i><span>历史</span></button>
+            <button class="nav-item" type="button" data-nav="settings"><i data-lucide="settings-2"></i><span>设置</span></button>
+          </nav>
+          <div class="engine-status">
+            <div class="engine-head"><span>解析引擎</span><span class="status-dot pending" id="engineStatusDot" aria-label="正在检查"></span></div>
+            <dl><div><dt>yt-dlp</dt><dd id="sideYtDlpVersion">检查中</dd></div></dl>
+            <button type="button" class="text-button" id="checkTools">重新检查</button>
+          </div>
+        </aside>
+
+        <main class="workspace" id="workspace">
+          <section class="view active" id="downloadView" data-view="download" aria-labelledby="downloadTitle">
+            <div class="page-header"><div><p class="eyebrow">新建任务</p><h1 id="downloadTitle">下载媒体</h1></div><button class="secondary-button compact" type="button" id="pasteTopButton"><i data-lucide="clipboard"></i><span>粘贴内容</span></button></div>
+            <form class="source-form" id="parseForm">
+              <label for="sourceUrl">分享内容或媒体链接</label>
+              <div class="url-field"><textarea id="sourceUrl" name="sourceUrl" rows="2" maxlength="20000" spellcheck="false" aria-describedby="parseHint parseError" placeholder="粘贴分享文案，或以 http / https 开头的媒体链接"></textarea><button class="field-action" type="button" id="pasteButton" aria-label="从剪贴板粘贴" title="粘贴内容"><i data-lucide="clipboard-paste"></i></button></div>
+              <div class="source-actions"><div class="source-hints" aria-live="polite" id="parseHint"><span><i data-lucide="scan-search"></i>自动识别文案中的首个链接 · 仅在本机解析</span></div><button class="primary-button" type="submit" id="parseButton"><i data-lucide="scan-search"></i><span>解析链接</span></button></div>
+              <p class="form-error" id="parseError" role="alert" hidden></p>
+            </form>
+
+            <section class="result-panel" id="resultPanel" aria-labelledby="resultTitle" hidden>
+              <div class="section-heading"><div><p class="eyebrow">解析结果</p><h2 id="resultTitle">选择下载方案</h2></div><span class="success-label"><i data-lucide="circle-check"></i>解析完成</span></div>
+              <div class="media-summary">
+                <figure class="media-thumbnail" id="mediaThumbnail"><span class="thumbnail-placeholder"><i data-lucide="clapperboard"></i></span><span class="duration" id="mediaDuration">--:--</span></figure>
+                <div class="media-copy"><div class="media-source"><span class="source-badge" id="mediaExtractor">MEDIA</span><span id="mediaCreator">未知来源</span></div><h3 id="mediaTitle">未命名媒体</h3><p id="mediaDescription">等待解析结果</p><dl class="media-facts"><div><dt>最高画质</dt><dd id="mediaQuality">--</dd></div><div><dt>字幕</dt><dd id="mediaSubtitles">--</dd></div><div><dt>预计大小</dt><dd id="mediaSize">由下载格式决定</dd></div></dl></div>
+              </div>
+              <div class="preset-section">
+                <div class="inline-heading"><h3>下载预设</h3><button class="text-button" type="button" id="resetPreset">恢复推荐</button></div>
+                <div class="preset-grid" role="radiogroup" aria-label="下载预设">
+                  <button class="preset-option selected" type="button" role="radio" aria-checked="true" data-preset="recommended"><span class="preset-icon"><i data-lucide="sparkles"></i></span><span><strong>推荐视频</strong><small>最高 1440p · MP4</small></span><i class="check-icon" data-lucide="check"></i></button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="best"><span class="preset-icon"><i data-lucide="maximize-2"></i></span><span><strong>原始最佳</strong><small>最高可用质量</small></span><i class="check-icon" data-lucide="check"></i></button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="mp4"><span class="preset-icon orange"><i data-lucide="monitor-play"></i></span><span><strong>兼容 MP4</strong><small>最高 1080p · H.264</small></span><i class="check-icon" data-lucide="check"></i></button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="audio"><span class="preset-icon blue"><i data-lucide="music-2"></i></span><span><strong>仅音频</strong><small>保留原始音质</small></span><i class="check-icon" data-lucide="check"></i></button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="mp3"><span class="preset-icon coral"><i data-lucide="headphones"></i></span><span><strong>MP3 音频</strong><small>通用兼容 · 320K</small></span><i class="check-icon" data-lucide="check"></i></button>
+                  <button class="preset-option" type="button" role="radio" aria-checked="false" data-preset="subtitles"><span class="preset-icon navy"><i data-lucide="captions"></i></span><span><strong>仅字幕</strong><small>全部可用语言</small></span><i class="check-icon" data-lucide="check"></i></button>
+                </div>
+              </div>
+              <div class="options-section">
+                <div class="option-tabs" role="tablist" aria-label="下载选项"><button class="option-tab active" type="button" role="tab" aria-selected="true" data-option-tab="video">视频</button><button class="option-tab" type="button" role="tab" aria-selected="false" data-option-tab="audio">音频</button><button class="option-tab" type="button" role="tab" aria-selected="false" data-option-tab="subtitle">字幕</button></div>
+                <div class="option-content active" data-option-panel="video"><label class="control-field"><span>分辨率上限</span><select id="resolutionSelect"><option value="2160">2160p</option><option value="1440" selected>1440p</option><option value="1080">1080p</option><option value="720">720p</option></select></label><label class="check-control"><input type="checkbox" id="embedThumbnail" checked /><span class="check-box"><i data-lucide="check"></i></span><span>嵌入封面</span></label><label class="check-control"><input type="checkbox" id="writeMetadata" checked /><span class="check-box"><i data-lucide="check"></i></span><span>写入媒体信息</span></label></div>
+                <div class="option-content" data-option-panel="audio" hidden><p class="option-note">音频预设会自动选择最佳音轨；MP3 预设转换为 320K MP3。</p></div>
+                <div class="option-content" data-option-panel="subtitle" hidden><label class="check-control"><input type="checkbox" id="includeAutoSubtitles" /><span class="check-box"><i data-lucide="check"></i></span><span>包含自动生成字幕</span></label></div>
+              </div>
+            </section>
+            <div class="download-bar" id="downloadBar" hidden><button class="destination-button" type="button" id="destinationButton"><i data-lucide="folder-open"></i><span><small>保存到</small><strong id="downloadDestination">--</strong></span><i data-lucide="chevron-right"></i></button><div class="download-summary"><span id="selectedPreset">推荐视频</span><strong id="selectedQuality">最高 1440p</strong></div><button class="primary-button large" type="button" id="downloadButton"><i data-lucide="download"></i><span>开始下载</span></button></div>
+          </section>
+
+          <section class="view" id="tasksView" data-view="tasks" aria-labelledby="tasksTitle" hidden>
+            <div class="page-header"><div><p class="eyebrow">任务中心</p><h1 id="tasksTitle">下载任务</h1></div><button class="primary-button compact" type="button" data-nav="download"><i data-lucide="plus"></i><span>新建下载</span></button></div>
+            <div class="metric-strip" aria-label="任务摘要"><div><span>进行中</span><strong id="metricActive">0</strong></div><div><span>等待中</span><strong id="metricQueued">0</strong></div><div><span>本次完成</span><strong id="metricCompleted">0</strong></div><div><span>实时速度</span><strong id="metricSpeed">0 B/s</strong></div></div>
+            <div class="toolbar-row"><div class="filter-tabs" role="tablist" aria-label="任务筛选"><button class="filter-tab active" type="button" role="tab" aria-selected="true" data-task-filter="all">全部 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="active">进行中 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="queued">等待 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="failed">失败 <span>0</span></button></div></div>
+            <div class="task-table" id="taskTable"><div class="task-table-head" aria-hidden="true"><span>名称</span><span>状态</span><span>大小</span><span>操作</span></div><div class="empty-state roomy" id="taskEmpty"><i data-lucide="inbox"></i><strong>还没有下载任务</strong><span>解析媒体链接后，任务会显示在这里</span></div></div>
+          </section>
+
+          <section class="view" id="historyView" data-view="history" aria-labelledby="historyTitle" hidden>
+            <div class="page-header"><div><p class="eyebrow">本地记录</p><h1 id="historyTitle">下载历史</h1></div><button class="secondary-button compact" type="button" id="openFolder"><i data-lucide="folder-open"></i><span>打开下载目录</span></button></div>
+            <div class="history-toolbar"><label class="search-field"><i data-lucide="search"></i><span class="sr-only">搜索历史</span><input type="search" id="historySearch" placeholder="搜索标题或来源" /></label></div>
+            <div class="history-list" id="historyList"></div><div class="empty-state roomy" id="historyEmpty"><i data-lucide="archive"></i><strong>暂无下载记录</strong><span>完成的任务会保存在这里</span></div>
+          </section>
+
+          <section class="view" id="settingsView" data-view="settings" aria-labelledby="settingsTitle" hidden>
+            <div class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="settingsTitle">设置</h1></div><span class="autosave-label"><i data-lucide="check"></i>自动保存</span></div>
+            <div class="settings-layout">
+              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="toolSettings">工具链</button></nav>
+              <div class="settings-content">
+                <section class="settings-group" id="downloadSettings" aria-labelledby="generalSettings"><div class="settings-heading"><h2 id="generalSettings">下载偏好</h2><p>应用于之后创建的任务</p></div><div class="setting-row"><div><strong>默认保存位置</strong><span id="settingsDirectory">--</span></div><button class="secondary-button compact" type="button" id="chooseDirectory">更改</button></div><label class="setting-row"><div><strong>同时下载任务</strong><span>并发数越高，对网络与磁盘占用越大</span></div><select id="concurrencySelect"><option value="1">1 个任务</option><option value="2">2 个任务</option><option value="3">3 个任务</option></select></label></section>
+                <section class="settings-group" id="authSettings" aria-labelledby="authTitle"><div class="settings-heading"><div><h2 id="authTitle">平台登录</h2><p>各平台使用独立会话</p></div><span class="auth-summary" id="authSummary">0 个平台已连接</span></div><div class="auth-privacy"><i data-lucide="shield-check"></i><span>登录页面与主应用隔离；ClipPort 不读取密码，Cookie 仅保存在本机。</span></div><div class="platform-list" id="authPlatformList" aria-live="polite"></div></section>
+                <section class="settings-group" id="appearanceSettings" aria-labelledby="appearanceTitle"><div class="settings-heading"><h2 id="appearanceTitle">外观</h2></div><label class="setting-row"><div><strong>主题</strong><span>可跟随操作系统显示模式</span></div><select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
+                <section class="settings-group" id="toolSettings" aria-labelledby="toolTitle"><div class="settings-heading"><div><h2 id="toolTitle">工具链</h2><p>解析需要 yt-dlp；媒体合并和校验需要 FFmpeg 与 ffprobe</p></div><span class="success-label" id="allToolsReady" hidden><i data-lucide="circle-check"></i>全部可用</span></div>
+                  <div class="tool-row"><span class="tool-icon"><i data-lucide="square-terminal"></i></span><div><strong>yt-dlp</strong><span id="ytDlpStatus">检查中</span></div><div class="tool-actions"><button class="secondary-button compact" id="installYtDlp" type="button"><i data-lucide="download"></i><span>安装/更新</span></button><button class="text-button" type="button" data-select-tool="ytDlp">选择文件</button></div></div>
+                  <div class="tool-row"><span class="tool-icon orange"><i data-lucide="audio-waveform"></i></span><div><strong>FFmpeg</strong><span id="ffmpegStatus">检查中</span></div><button class="text-button" type="button" data-select-tool="ffmpeg">选择文件</button></div>
+                  <div class="tool-row"><span class="tool-icon blue"><i data-lucide="scan-line"></i></span><div><strong>ffprobe</strong><span id="ffprobeStatus">检查中</span></div><button class="text-button" type="button" data-select-tool="ffprobe">选择文件</button></div>
+                </section>
+                <section class="settings-group app-info"><div class="settings-heading"><h2>关于 ClipPort</h2></div><div class="setting-row"><div><strong>应用版本</strong><span id="appVersion">--</span></div><span>yt-dlp + FFmpeg + Electron</span></div></section>
+                <section class="settings-group author-contact" aria-labelledby="authorContactTitle">
+                  <div class="settings-heading"><div><h2 id="authorContactTitle">联系作者</h2><p>使用微信扫描二维码添加好友</p></div></div>
+                  <div class="author-contact-content">
+                    <img class="author-qr" src="./assets/author-wechat-qr.png" width="176" height="176" loading="lazy" alt="作者微信二维码">
+                    <div class="author-contact-copy"><strong>微信交流</strong><span>反馈问题、交流使用建议</span></div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <aside class="queue-panel" aria-labelledby="queueTitle">
+          <div class="queue-header"><div><p class="eyebrow">实时队列</p><h2 id="queueTitle">活动任务 <span id="queueCount">0</span></h2></div></div>
+          <div class="speed-summary"><span class="speed-icon"><i data-lucide="gauge"></i></span><span><small>总下载速度</small><strong id="queueSpeed">0 B/s</strong></span><span class="network-state" id="queueState">空闲</span></div>
+          <div class="queue-list" id="queueList"><div class="empty-state compact" id="queueEmpty"><i data-lucide="layers-3"></i><span>暂无活动任务</span></div></div>
+          <button class="queue-footer" type="button" data-nav="tasks"><span>查看全部任务</span><i data-lucide="arrow-right"></i></button>
+        </aside>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"><span class="toast-icon"><i data-lucide="circle-check"></i></span><span><strong id="toastTitle">操作完成</strong><small id="toastMessage"></small></span><button class="icon-button" type="button" id="closeToast" aria-label="关闭通知"><i data-lucide="x"></i></button></div>
+    <script src="./vendor/lucide.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

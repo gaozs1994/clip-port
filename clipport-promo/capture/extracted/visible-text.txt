@@ -1,0 +1,7 @@
+ClipPort
+
+Paste a media URL, parse it locally, choose a recommendation or format, and start the download.
+
+The interface exposes useful stages instead of command-line complexity: parsing, download, merge or transcode, verification, completion, retry, and recovery.
+
+Core product promise: three clear steps, transparent progress, recoverable tasks, and privacy that stays on the user's machine by default.

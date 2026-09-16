@@ -1,0 +1,15 @@
+{
+  "bgm": null,
+  "voices": [],
+  "sfx": [
+    { "frame": 1, "file": ".media/audio/sfx/sfx_001.mp3", "offset_s": 0.15, "duration_s": 2.5, "volume": 0.28 },
+    { "frame": 2, "file": ".media/audio/sfx/sfx_003.mp3", "offset_s": 0.05, "duration_s": 0.6, "volume": 0.3 },
+    { "frame": 2, "file": ".media/audio/sfx/sfx_002.mp3", "offset_s": 1.5, "duration_s": 0.4, "volume": 0.38 },
+    { "frame": 3, "file": ".media/audio/sfx/sfx_003.mp3", "offset_s": 0.05, "duration_s": 0.6, "volume": 0.28 },
+    { "frame": 3, "file": ".media/audio/sfx/sfx_002.mp3", "offset_s": 1.25, "duration_s": 0.4, "volume": 0.34 },
+    { "frame": 4, "file": ".media/audio/sfx/sfx_003.mp3", "offset_s": 0.05, "duration_s": 0.6, "volume": 0.28 },
+    { "frame": 4, "file": ".media/audio/sfx/sfx_002.mp3", "offset_s": 2.48, "duration_s": 0.4, "volume": 0.34 },
+    { "frame": 5, "file": ".media/audio/sfx/sfx_003.mp3", "offset_s": 0.05, "duration_s": 0.6, "volume": 0.22 },
+    { "frame": 6, "file": ".media/audio/sfx/sfx_001.mp3", "offset_s": 1.4, "duration_s": 2.5, "volume": 0.3 }
+  ]
+}

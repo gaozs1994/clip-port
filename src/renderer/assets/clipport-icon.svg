@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ClipPort app icon</title>
+  <desc id="desc">A cyberpunk neon media port and play symbol on a full-bleed dark background.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090D18" />
+      <stop offset=".58" stop-color="#101124" />
+      <stop offset="1" stop-color="#170B20" />
+    </linearGradient>
+    <linearGradient id="port" x1="112" y1="112" x2="382" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#58F7FF" />
+      <stop offset=".55" stop-color="#00D9FF" />
+      <stop offset="1" stop-color="#7B61FF" />
+    </linearGradient>
+    <linearGradient id="play" x1="224" y1="190" x2="346" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF4FC8" />
+      <stop offset="1" stop-color="#FF1F79" />
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#37EAF7" stroke-opacity=".045" />
+    </pattern>
+    <filter id="cyanGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <filter id="pinkGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)" />
+  <rect width="512" height="512" fill="url(#grid)" />
+
+  <path d="M106 38H406L474 106V406L406 474H106L38 406V106Z" fill="none" stroke="#32EAF2" stroke-opacity=".34" stroke-width="4" />
+  <path d="M106 38H202M310 474H406L474 406V316" fill="none" stroke="#FF2CA8" stroke-width="7" />
+  <path d="M38 174V106L106 38H158M474 346V406L406 474H362" fill="none" stroke="#58F7FF" stroke-width="7" />
+
+  <path d="M357 146A160 160 0 1 0 357 366" fill="none" stroke="#FF2CA8" stroke-opacity=".34" stroke-width="66" stroke-linecap="square" transform="translate(8 3)" filter="url(#pinkGlow)" />
+  <path d="M357 146A160 160 0 1 0 357 366" fill="none" stroke="url(#port)" stroke-width="58" stroke-linecap="square" filter="url(#cyanGlow)" />
+
+  <path d="M224 184L350 256L224 328Z" fill="#FF2CA8" fill-opacity=".3" transform="translate(10 5)" filter="url(#pinkGlow)" />
+  <path d="M224 184L350 256L224 328Z" fill="url(#play)" stroke="#FFC4ED" stroke-width="5" stroke-linejoin="bevel" />
+  <path d="M245 221L306 256L245 291Z" fill="#0B1220" fill-opacity=".9" />
+
+  <g fill="none" stroke-linecap="square">
+    <path d="M384 210H444" stroke="#FF2CA8" stroke-width="8" />
+    <path d="M397 256H462" stroke="#58F7FF" stroke-width="8" />
+    <path d="M384 302H444" stroke="#FF2CA8" stroke-width="8" />
+  </g>
+  <g fill="#58F7FF">
+    <rect x="70" y="70" width="13" height="13" />
+    <rect x="92" y="70" width="32" height="13" />
+  </g>
+  <g fill="#FF2CA8">
+    <rect x="388" y="429" width="13" height="13" />
+    <rect x="410" y="429" width="32" height="13" />
+  </g>
+</svg>
