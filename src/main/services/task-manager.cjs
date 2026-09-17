@@ -27,12 +27,13 @@ function tail(value, limit = 12_000) {
 }
 
 class TaskManager {
-  constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, onTaskChanged, onHistoryChanged }) {
+  constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, canStartTask = () => true, onTaskChanged, onHistoryChanged }) {
     this.store = store;
     this.toolchain = toolchain;
     this.safeStorage = safeStorage;
     this.cookieManager = cookieManager;
     this.douyinResolver = douyinResolver;
+    this.canStartTask = canStartTask;
     this.onTaskChanged = onTaskChanged;
     this.onHistoryChanged = onHistoryChanged;
     this.running = new Map();
@@ -120,7 +121,7 @@ class TaskManager {
   }
 
   async schedule() {
-    if (this.scheduling || this.stopping) return;
+    if (this.scheduling || this.stopping || !this.canStartTask()) return;
     this.scheduling = true;
     try {
       const limit = this.store.getSettings().concurrency;

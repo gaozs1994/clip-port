@@ -21,6 +21,8 @@ const { TaskManager } = require("./services/task-manager.cjs");
 const { CookieManager } = require("./services/cookie-manager.cjs");
 const { DouyinResolver } = require("./services/douyin-resolver.cjs");
 const { UpdateManager } = require("./services/update-manager.cjs");
+const { DeviceIdentity } = require("./services/device-identity.cjs");
+const { LicenseManager } = require("./services/license-manager.cjs");
 const { AppError, assertTaskId, sanitizeSettingsPatch } = require("./services/validators.cjs");
 
 protocol.registerSchemesAsPrivileged([
@@ -38,6 +40,7 @@ let taskManager = null;
 let cookieManager = null;
 let douyinResolver = null;
 let updateManager = null;
+let licenseManager = null;
 let shutdownStarted = false;
 const smokeTest = process.env.CLIPPORT_SMOKE_TEST === "1";
 
@@ -162,14 +165,21 @@ function registerIpc() {
     toolchain: await toolchain.getStatus({ fresh: true }),
     authPlatforms: await cookieManager.list(),
     updateStatus: updateManager.getStatus(),
+    licenseStatus: licenseManager.getStatus(),
   }));
 
   handle("media:parse", ({ url }) => mediaService.parse(url));
   handle("media:cancel-parse", () => mediaService.cancel());
   handle("clipboard:read-text", () => clipboard.readText().slice(0, 20_000));
-  handle("tasks:create", (payload) => taskManager.create(payload));
+  handle("tasks:create", (payload) => {
+    licenseManager.requireActive();
+    return taskManager.create(payload);
+  });
   handle("tasks:pause", ({ id }) => taskManager.pause(id));
-  handle("tasks:resume", ({ id }) => taskManager.resume(id));
+  handle("tasks:resume", ({ id }) => {
+    licenseManager.requireActive();
+    return taskManager.resume(id);
+  });
   handle("tasks:cancel", ({ id }) => taskManager.cancel(id));
   handle("tasks:remove", ({ id }) => taskManager.remove(id));
 
@@ -229,6 +239,30 @@ function registerIpc() {
   handle("updates:download", () => updateManager.download());
   handle("updates:install", () => updateManager.install());
 
+  handle("license:status", () => licenseManager.getStatus());
+  handle("license:copy-device-code", () => {
+    clipboard.writeText(licenseManager.getStatus().deviceCode);
+    return true;
+  });
+  handle("license:activate", ({ code }) => {
+    const status = licenseManager.activate(code);
+    taskManager.schedule();
+    return status;
+  });
+  handle("license:clear", async () => {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      title: "清除设备授权",
+      message: "清除此设备保存的授权码？",
+      detail: "清除后将不能创建或继续下载任务，重新输入有效授权码即可恢复。",
+      buttons: ["取消", "清除授权"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    return result.response === 1 ? licenseManager.clear() : null;
+  });
+
   handle("files:open", async ({ recordType, id }) => {
     const output = findOutput(recordType, id);
     if (!output) throw new AppError("FILE_MISSING", "输出文件不存在");
@@ -270,6 +304,15 @@ async function initialize() {
   setupProtocol();
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   store = new AppStore({ userDataPath: app.getPath("userData"), downloadsPath: app.getPath("downloads") });
+  licenseManager = new LicenseManager({
+    deviceIdentity: new DeviceIdentity(),
+    safeStorage,
+    userDataPath: app.getPath("userData"),
+    publicKey: fs.readFileSync(path.join(__dirname, "license-public-key.pem"), "utf8"),
+    enforce: app.isPackaged,
+    onStatus: (status) => send("license:changed", status),
+  });
+  await licenseManager.initialize();
   cookieManager = new CookieManager({
     sessionModule: session,
     BrowserWindow,
@@ -291,6 +334,7 @@ async function initialize() {
     safeStorage,
     cookieManager,
     douyinResolver,
+    canStartTask: () => licenseManager.isActive(),
     onTaskChanged: (task) => send("tasks:changed", task),
     onHistoryChanged: (entry) => send("history:changed", entry),
   });
@@ -309,7 +353,7 @@ async function initialize() {
   });
   registerIpc();
   createWindow();
-  taskManager.schedule();
+  if (licenseManager.isActive()) taskManager.schedule();
   updateManager.start();
 }
 

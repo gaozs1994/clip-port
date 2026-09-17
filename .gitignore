@@ -3,6 +3,7 @@ dist/
 .playwright-cli/
 output/
 tools/
+.local-license/
 *.log
 .DS_Store
 Thumbs.db

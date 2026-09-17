@@ -61,3 +61,25 @@ test("does not start a queued task canceled during tool discovery", async () => 
   assert.ok(path.resolve(directory).startsWith(`${path.resolve(os.tmpdir())}${path.sep}`));
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+test("keeps queued tasks idle while the device license is inactive", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-license-gate-"));
+  const store = new AppStore({ userDataPath: directory, downloadsPath: directory });
+  const toolchain = { calls: 0, requireReady() { this.calls += 1; return Promise.resolve({}); } };
+  const manager = new TaskManager({
+    store,
+    toolchain,
+    safeStorage: { isEncryptionAvailable: () => false },
+    canStartTask: () => false,
+  });
+  manager.create({
+    url: "https://example.com/licensed",
+    outputRoot: directory,
+    media: { id: "sample", title: "Sample", uploader: "Tester", extractor: "test" },
+  });
+
+  assert.equal(store.listTasks()[0].state, "queued");
+  assert.equal(toolchain.calls, 0);
+  assert.equal(manager.launching.size, 0);
+  fs.rmSync(directory, { recursive: true, force: true });
+});

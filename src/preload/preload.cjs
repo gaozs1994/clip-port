@@ -50,6 +50,12 @@ contextBridge.exposeInMainWorld("clipport", {
     download: () => invoke("updates:download"),
     install: () => invoke("updates:install"),
   },
+  license: {
+    status: () => invoke("license:status"),
+    copyDeviceCode: () => invoke("license:copy-device-code"),
+    activate: (code) => invoke("license:activate", { code }),
+    clear: () => invoke("license:clear"),
+  },
   files: {
     open: (recordType, id) => invoke("files:open", { recordType, id }),
     reveal: (recordType, id) => invoke("files:reveal", { recordType, id }),
@@ -61,5 +67,6 @@ contextBridge.exposeInMainWorld("clipport", {
     onToolStatus: (callback) => subscribe("tools:changed", callback),
     onAuthChanged: (callback) => subscribe("auth:changed", callback),
     onUpdateStatus: (callback) => subscribe("updates:changed", callback),
+    onLicenseStatus: (callback) => subscribe("license:changed", callback),
   },
 });

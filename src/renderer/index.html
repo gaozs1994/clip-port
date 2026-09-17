@@ -95,10 +95,25 @@
           <section class="view" id="settingsView" data-view="settings" aria-labelledby="settingsTitle" hidden>
             <div class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="settingsTitle">设置</h1></div><span class="autosave-label"><i data-lucide="check"></i>自动保存</span></div>
             <div class="settings-layout">
-              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="toolSettings">工具链</button><button type="button" data-settings-anchor="aboutSettings">关于</button></nav>
+              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="licenseSettings">设备授权</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="toolSettings">工具链</button><button type="button" data-settings-anchor="aboutSettings">关于</button></nav>
               <div class="settings-content">
                 <section class="settings-group" id="downloadSettings" aria-labelledby="generalSettings"><div class="settings-heading"><h2 id="generalSettings">下载偏好</h2><p>应用于之后创建的任务</p></div><div class="setting-row"><div><strong>默认保存位置</strong><span id="settingsDirectory">--</span></div><button class="secondary-button compact" type="button" id="chooseDirectory">更改</button></div><label class="setting-row"><div><strong>同时下载任务</strong><span>并发数越高，对网络与磁盘占用越大</span></div><select id="concurrencySelect"><option value="1">1 个任务</option><option value="2">2 个任务</option><option value="3">3 个任务</option></select></label></section>
                 <section class="settings-group" id="authSettings" aria-labelledby="authTitle"><div class="settings-heading"><div><h2 id="authTitle">平台登录</h2><p>各平台使用独立会话</p></div><span class="auth-summary" id="authSummary">0 个平台已连接</span></div><div class="auth-privacy"><i data-lucide="shield-check"></i><span>登录页面与主应用隔离；ClipPort 不读取密码，Cookie 仅保存在本机。</span></div><div class="platform-list" id="authPlatformList" aria-live="polite"></div></section>
+                <section class="settings-group license-settings" id="licenseSettings" aria-labelledby="licenseTitle">
+                  <div class="settings-heading"><div><h2 id="licenseTitle">设备授权</h2><p>授权码仅对当前 Windows 设备有效</p></div><span class="license-status unlicensed" id="licenseStatus">未授权</span></div>
+                  <div class="auth-privacy"><i data-lucide="shield-check"></i><span id="licenseMessage" role="status" aria-live="polite">正在读取设备授权状态</span></div>
+                  <div class="license-device-row">
+                    <span class="tool-icon blue"><i data-lucide="fingerprint"></i></span>
+                    <div><strong>当前设备码</strong><code id="licenseDeviceCode">正在生成</code></div>
+                    <button class="secondary-button compact" id="copyDeviceCode" type="button"><i data-lucide="copy"></i><span>复制设备码</span></button>
+                  </div>
+                  <form class="license-form" id="licenseForm">
+                    <label for="licenseCode">授权码</label>
+                    <textarea id="licenseCode" rows="3" maxlength="8192" spellcheck="false" autocomplete="off" aria-describedby="licenseDetail licenseError" placeholder="CPL1.授权内容.签名"></textarea>
+                    <p class="form-error license-error" id="licenseError" role="alert" hidden></p>
+                    <div class="license-meta"><span id="licenseDetail">将设备码发送给作者以获取授权码</span><div class="license-actions"><button class="text-button danger" id="clearLicense" type="button" hidden>清除授权</button><button class="primary-button compact" id="activateLicense" type="submit"><i data-lucide="key-round"></i><span>验证并绑定</span></button></div></div>
+                  </form>
+                </section>
                 <section class="settings-group" id="appearanceSettings" aria-labelledby="appearanceTitle"><div class="settings-heading"><h2 id="appearanceTitle">外观</h2></div><label class="setting-row"><div><strong>主题</strong><span>可跟随操作系统显示模式</span></div><select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
                 <section class="settings-group" id="toolSettings" aria-labelledby="toolTitle"><div class="settings-heading"><div><h2 id="toolTitle">工具链</h2><p>解析需要 yt-dlp；媒体合并和校验需要 FFmpeg 与 ffprobe</p></div><span class="success-label" id="allToolsReady" hidden><i data-lucide="circle-check"></i>全部可用</span></div>
                   <div class="tool-row"><span class="tool-icon"><i data-lucide="square-terminal"></i></span><div><strong>yt-dlp</strong><span id="ytDlpStatus">检查中</span></div><div class="tool-actions"><button class="secondary-button compact" id="installYtDlp" type="button"><i data-lucide="download"></i><span>安装/更新</span></button><button class="text-button" type="button" data-select-tool="ytDlp">选择文件</button></div></div>

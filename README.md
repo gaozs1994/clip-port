@@ -13,6 +13,7 @@ ClipPort 是一款基于 Electron、yt-dlp 和 FFmpeg/ffprobe 的本地视频解
 - yt-dlp 官方版本安装与 SHA-512 校验
 - 内置 FFmpeg/ffprobe，自定义工具路径可覆盖
 - 抖音、哔哩哔哩、YouTube、小红书隔离登录会话与 Cookie 状态校验
+- Windows 设备码与 Ed25519 离线授权
 
 首版暂不支持播放列表逐项选择和直播下载。
 平台登录页运行在独立、无 Node 权限的受限窗口中。ClipPort 不读取账号密码；Cookie 保存在对应平台的本机会话中，仅在匹配平台的 yt-dlp 进程运行期间导出为临时文件并随即删除。部分平台可能限制 Electron 登录，实际可用性以平台页面和当前 yt-dlp 版本为准。
@@ -36,6 +37,24 @@ npm run build
 ```
 
 `npm run build` 会生成可直接运行的 `dist/win-unpacked/ClipPort.exe`。`npm run dist` 用于生成 Windows NSIS 安装包。
+
+## 设备授权签发
+
+项目已生成签发公钥 `src/main/license-public-key.pem`。对应私钥位于 Git 忽略的 `.local-license/license-private.pem`，请离线备份并限制访问；私钥丢失后，无法继续签发与现有安装包兼容的授权码。
+
+用户在“设置 > 设备授权”复制设备码后，使用以下命令签发永久授权：
+
+```powershell
+npm run license:issue -- --device CPD1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX --holder 用户名
+```
+
+签发限时授权时增加到期日期：
+
+```powershell
+npm run license:issue -- --device CPD1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX --holder 用户名 --expires 2027-12-31
+```
+
+签发工具只读取本地私钥，不连接网络。授权码包含目标设备码并由 Ed25519 签名，客户端仅内置公钥用于验证。
 
 ## 自动发布
 

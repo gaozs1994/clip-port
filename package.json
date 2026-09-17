@@ -14,6 +14,8 @@
     "smoke": "npm run prepare:renderer && electron scripts/electron-smoke.cjs",
     "check": "node scripts/check.cjs",
     "test": "node --test",
+    "license:keygen": "node scripts/license-issuer.cjs generate-key",
+    "license:issue": "node scripts/license-issuer.cjs issue",
     "build": "npm run check && npm test && npm run prepare:renderer && electron-builder --dir",
     "dist": "npm run check && npm test && npm run prepare:renderer && electron-builder --win nsis --publish never"
   },

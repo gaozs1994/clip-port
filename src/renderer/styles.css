@@ -2502,6 +2502,132 @@ select,
   animation: pulse-status 1.2s ease-in-out infinite;
 }
 
+.license-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.license-status::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  content: "";
+}
+
+.license-status.active,
+.license-status.development {
+  color: var(--success);
+}
+
+.license-status.active::before,
+.license-status.development::before {
+  background: var(--success);
+}
+
+.license-status.invalid,
+.license-status.expired,
+.license-status.device_mismatch,
+.license-status.unavailable {
+  color: var(--danger);
+}
+
+.license-status.invalid::before,
+.license-status.expired::before,
+.license-status.device_mismatch::before,
+.license-status.unavailable::before {
+  background: var(--danger);
+}
+
+.license-device-row {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.license-device-row > div {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.license-device-row strong,
+.license-form > label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.license-device-row code {
+  overflow: hidden;
+  color: var(--text);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.license-form {
+  padding: 13px 0 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.license-form textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 132px;
+  padding: 10px 12px;
+  resize: vertical;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.license-form textarea:focus {
+  border-color: var(--primary);
+}
+
+.license-form .license-error {
+  margin-top: 0;
+}
+
+.license-meta {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.license-meta > span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.license-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.text-button.danger {
+  color: var(--danger);
+}
+
 @keyframes pulse-status {
   50% { opacity: 0.35; }
 }
@@ -2534,6 +2660,29 @@ select,
   .toolchain-alert {
     width: 34px;
     justify-content: center;
+  }
+
+  .license-device-row,
+  .license-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .license-device-row {
+    padding: 12px 0;
+  }
+
+  .license-device-row > .tool-icon {
+    display: none;
+  }
+
+  .license-device-row .secondary-button,
+  .license-actions .primary-button {
+    width: 100%;
+  }
+
+  .license-actions {
+    justify-content: flex-end;
   }
 
   .preset-grid {

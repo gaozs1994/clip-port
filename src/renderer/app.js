@@ -22,6 +22,15 @@
     valid: "有效",
     invalid: "已失效",
   };
+  const LICENSE_STATUS_LABELS = {
+    unlicensed: "未授权",
+    active: "已授权",
+    expired: "已过期",
+    invalid: "授权无效",
+    device_mismatch: "设备不匹配",
+    unavailable: "设备码不可用",
+    development: "开发模式",
+  };
   const ACTIVE_STATES = new Set(["preparing", "downloading", "processing", "verifying", "pausing", "canceling"]);
   const state = {
     appVersion: "--",
@@ -33,6 +42,7 @@
     history: [],
     authPlatforms: [],
     updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, message: "启动后自动检查更新" },
+    licenseStatus: { status: "unlicensed", active: false, hasLicense: false, deviceCode: "", message: "正在读取设备授权状态" },
     preset: "recommended",
     taskFilter: "all",
     parsing: false,
@@ -74,7 +84,7 @@
   }
 
   function createDemoApi() {
-    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set(), update: new Set() };
+    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set(), update: new Set(), license: new Set() };
     const demoSettings = { downloadDirectory: "C:\\Users\\Public\\Downloads\\ClipPort", concurrency: 2, theme: "dark", toolPaths: {} };
     const demoTools = {
       ready: true,
@@ -93,11 +103,13 @@
       { id: "xiaohongshu", name: "小红书", domain: "xiaohongshu.com", status: "invalid", message: "Cookie 不完整，请重新登录", cookieCount: 2, expiresAt: "", lastCheckedAt: new Date().toISOString(), lastVerifiedAt: "" },
     ];
     let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, message: "可手动检查更新" };
+    let demoLicenseStatus = { status: "development", active: true, hasLicense: false, deviceCode: "CPD1-DEMO-0000-0000-0000-0000-0000-0000", licenseId: "", holder: "", issuedAt: "", expiresAt: "", message: "开发环境不强制设备授权" };
     let timer = null;
 
     const emitTask = (task) => listeners.task.forEach((callback) => callback(structuredClone(task)));
     const emitAuth = (platform) => listeners.auth.forEach((callback) => callback(structuredClone(platform)));
     const emitUpdate = () => listeners.update.forEach((callback) => callback(structuredClone(demoUpdateStatus)));
+    const emitLicense = () => listeners.license.forEach((callback) => callback(structuredClone(demoLicenseStatus)));
     const findDemoAuth = (platformId) => demoAuthPlatforms.find((platform) => platform.id === platformId);
     const progressDemo = (task) => {
       if (timer) clearInterval(timer);
@@ -121,7 +133,7 @@
 
     return {
       app: {
-        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms, updateStatus: demoUpdateStatus }),
+        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms, updateStatus: demoUpdateStatus, licenseStatus: demoLicenseStatus }),
         minimize: () => {}, toggleMaximize: () => {}, close: () => {},
       },
       clipboard: { readText: async () => ({ ok: true, data: await navigator.clipboard?.readText().catch(() => "") || "" }) },
@@ -180,6 +192,17 @@
         download: () => ok(structuredClone(demoUpdateStatus)),
         install: () => ok(false),
       },
+      license: {
+        status: () => ok(structuredClone(demoLicenseStatus)),
+        copyDeviceCode: () => ok(true),
+        activate: async (code) => {
+          await sleep(300);
+          if (!String(code || "").startsWith("CPL1.")) return { ok: false, error: { code: "LICENSE_INVALID", message: "授权码格式不正确" } };
+          demoLicenseStatus = { ...demoLicenseStatus, status: "active", active: true, hasLicense: true, holder: "预览用户", expiresAt: "", message: "设备已永久授权" };
+          emitLicense(); return ok(structuredClone(demoLicenseStatus));
+        },
+        clear: () => { demoLicenseStatus = { ...demoLicenseStatus, status: "development", active: true, hasLicense: false, holder: "", message: "开发环境不强制设备授权" }; emitLicense(); return ok(structuredClone(demoLicenseStatus)); },
+      },
       files: { open: () => ok(true), reveal: () => ok(true), openDownloadDirectory: () => ok(true) },
       events: {
         onTaskChanged: (callback) => { listeners.task.add(callback); return () => listeners.task.delete(callback); },
@@ -187,6 +210,7 @@
         onToolStatus: (callback) => { listeners.tool.add(callback); return () => listeners.tool.delete(callback); },
         onAuthChanged: (callback) => { listeners.auth.add(callback); return () => listeners.auth.delete(callback); },
         onUpdateStatus: (callback) => { listeners.update.add(callback); return () => listeners.update.delete(callback); },
+        onLicenseStatus: (callback) => { listeners.license.add(callback); return () => listeners.license.delete(callback); },
       },
     };
   }
@@ -570,9 +594,33 @@
     $("#concurrencySelect").value = String(state.settings.concurrency || 2);
     $("#themeSelect").value = state.settings.theme || "system";
     $("#appVersion").textContent = state.appVersion;
+    renderLicenseStatus();
     renderUpdateStatus();
     renderAuthPlatforms();
     renderToolchain();
+  }
+
+  function renderLicenseStatus() {
+    const status = state.licenseStatus || {};
+    const badge = $("#licenseStatus");
+    badge.className = `license-status ${status.status || "unlicensed"}`;
+    badge.textContent = LICENSE_STATUS_LABELS[status.status] || "状态未知";
+    $("#licenseMessage").textContent = status.message || "无法读取设备授权状态";
+    $("#licenseDeviceCode").textContent = status.deviceCode || "设备码不可用";
+    $("#copyDeviceCode").disabled = !status.deviceCode;
+    $("#clearLicense").hidden = !status.hasLicense;
+
+    const detail = $("#licenseDetail");
+    if (status.status === "active") {
+      const owner = status.holder ? `授权给 ${status.holder}` : "授权已绑定当前设备";
+      detail.textContent = status.expiresAt ? `${owner} · 有效期至 ${formatDate(status.expiresAt)}` : `${owner} · 永久有效`;
+    } else if (status.status === "expired" && status.expiresAt) {
+      detail.textContent = `授权已于 ${formatDate(status.expiresAt)} 到期`;
+    } else if (status.status === "development") {
+      detail.textContent = "正式安装包将校验设备授权";
+    } else {
+      detail.textContent = "将设备码发送给作者以获取授权码";
+    }
   }
 
   function renderUpdateStatus() {
@@ -685,6 +733,10 @@
     } catch (error) {
       showToast("无法创建任务", error.message, "error");
       if (/工具|yt-dlp|FFmpeg/i.test(error.message)) showView("settings");
+      if (error.code === "LICENSE_REQUIRED") {
+        showView("settings");
+        activateSettingsSection("licenseSettings", "auto");
+      }
     } finally { button.disabled = false; }
   }
 
@@ -696,7 +748,13 @@
       else if (action === "resume") upsertTask(await call(api.tasks.resume(id)));
       else if (action === "cancel") upsertTask(await call(api.tasks.cancel(id)));
       else if (action === "remove") await call(api.tasks.remove(id));
-    } catch (error) { showToast("任务操作失败", error.message, "error"); }
+    } catch (error) {
+      showToast("任务操作失败", error.message, "error");
+      if (error.code === "LICENSE_REQUIRED") {
+        showView("settings");
+        activateSettingsSection("licenseSettings", "auto");
+      }
+    }
   }
 
   async function updateSettings(patch, successMessage = "设置已保存") {
@@ -731,6 +789,63 @@
       else if (state.updateStatus?.status === "error") showToast("检查更新失败", state.updateStatus.message, "error");
     } catch (error) {
       showToast(method === "download" ? "更新下载失败" : "检查更新失败", error.message, "error");
+    }
+  }
+
+  async function copyDeviceCode() {
+    try {
+      await call(api.license.copyDeviceCode());
+      showToast("设备码已复制", "可发送给作者签发授权码");
+    } catch (error) {
+      showToast("无法复制设备码", error.message, "error");
+    }
+  }
+
+  async function activateLicense(event) {
+    event?.preventDefault();
+    const code = $("#licenseCode").value.trim();
+    const field = $("#licenseCode");
+    const errorNode = $("#licenseError");
+    errorNode.hidden = true;
+    field.removeAttribute("aria-invalid");
+    if (!code) {
+      errorNode.textContent = "请输入以 CPL1 开头的完整授权码";
+      errorNode.hidden = false;
+      field.setAttribute("aria-invalid", "true");
+      showToast("请输入授权码", "授权码以 CPL1 开头", "error");
+      field.focus();
+      return;
+    }
+    const button = $("#activateLicense");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    $("span", button).textContent = "正在验证";
+    try {
+      state.licenseStatus = await call(api.license.activate(code));
+      field.value = "";
+      renderLicenseStatus();
+      showToast("设备授权已绑定", state.licenseStatus.message);
+    } catch (error) {
+      errorNode.textContent = error.message;
+      errorNode.hidden = false;
+      field.setAttribute("aria-invalid", "true");
+      showToast("授权码验证失败", error.message, "error");
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      $("span", button).textContent = "验证并绑定";
+    }
+  }
+
+  async function clearLicense() {
+    try {
+      const status = await call(api.license.clear());
+      if (!status) return;
+      state.licenseStatus = status;
+      renderLicenseStatus();
+      showToast("设备授权已清除", "重新输入有效授权码即可恢复下载");
+    } catch (error) {
+      showToast("无法清除设备授权", error.message, "error");
     }
   }
 
@@ -808,6 +923,13 @@
     $("#openFolder").addEventListener("click", () => call(api.files.openDownloadDirectory()).catch((error) => showToast("无法打开目录", error.message, "error")));
     $("#checkTools").addEventListener("click", () => refreshTools(true));
     $("#checkUpdates").addEventListener("click", handleUpdateAction);
+    $("#licenseForm").addEventListener("submit", activateLicense);
+    $("#licenseCode").addEventListener("input", (event) => {
+      event.currentTarget.removeAttribute("aria-invalid");
+      $("#licenseError").hidden = true;
+    });
+    $("#copyDeviceCode").addEventListener("click", copyDeviceCode);
+    $("#clearLicense").addEventListener("click", clearLicense);
     $("#chooseDirectory").addEventListener("click", async () => { try { const settings = await call(api.settings.chooseDownloadDirectory()); if (settings) { state.settings = settings; renderSettings(); showToast("默认目录已更新"); } } catch (error) { showToast("无法选择目录", error.message, "error"); } });
     $("#concurrencySelect").addEventListener("change", (event) => updateSettings({ concurrency: Number(event.target.value) }));
     $("#themeSelect").addEventListener("change", (event) => updateSettings({ theme: event.target.value }));
@@ -838,6 +960,10 @@
       api.events.onUpdateStatus?.((status) => {
         state.updateStatus = status;
         renderUpdateStatus();
+      });
+      api.events.onLicenseStatus?.((status) => {
+        state.licenseStatus = status;
+        renderLicenseStatus();
       });
       window.__clipportState = state;
     } catch (error) {
