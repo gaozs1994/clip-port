@@ -103,7 +103,9 @@
       { id: "xiaohongshu", name: "小红书", domain: "xiaohongshu.com", status: "invalid", message: "Cookie 不完整，请重新登录", cookieCount: 2, expiresAt: "", lastCheckedAt: new Date().toISOString(), lastVerifiedAt: "" },
     ];
     let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, message: "可手动检查更新" };
-    let demoLicenseStatus = { status: "development", active: true, hasLicense: false, deviceCode: "CPD1-DEMO-0000-0000-0000-0000-0000-0000", licenseId: "", holder: "", issuedAt: "", expiresAt: "", message: "开发环境不强制设备授权" };
+    const demoIssuedAt = new Date();
+    const demoExpiresAt = new Date(demoIssuedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+    let demoLicenseStatus = { status: "active", active: true, hasLicense: true, deviceCode: "CPD1-DEMO-0000-0000-0000-0000-0000-0000", licenseId: "preview-license", holder: "预览用户", issuedAt: demoIssuedAt.toISOString(), expiresAt: demoExpiresAt.toISOString(), message: "设备已授权" };
     let timer = null;
 
     const emitTask = (task) => listeners.task.forEach((callback) => callback(structuredClone(task)));
@@ -201,7 +203,7 @@
           demoLicenseStatus = { ...demoLicenseStatus, status: "active", active: true, hasLicense: true, holder: "预览用户", expiresAt: "", message: "设备已永久授权" };
           emitLicense(); return ok(structuredClone(demoLicenseStatus));
         },
-        clear: () => { demoLicenseStatus = { ...demoLicenseStatus, status: "development", active: true, hasLicense: false, holder: "", message: "开发环境不强制设备授权" }; emitLicense(); return ok(structuredClone(demoLicenseStatus)); },
+        clear: () => { demoLicenseStatus = { ...demoLicenseStatus, status: "unlicensed", active: false, hasLicense: false, licenseId: "", holder: "", issuedAt: "", expiresAt: "", message: "尚未绑定授权码" }; emitLicense(); return ok(structuredClone(demoLicenseStatus)); },
       },
       files: { open: () => ok(true), reveal: () => ok(true), openDownloadDirectory: () => ok(true) },
       events: {
@@ -251,6 +253,17 @@
     return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
   }
 
+  function formatLicenseDate(value, includeTime = false) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "未知时间";
+    return new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    }).format(date);
+  }
+
   function compactVersion(value) {
     if (!value) return "不可用";
     return String(value).split(/\s+/).slice(0, 2).join(" ").slice(0, 28);
@@ -295,6 +308,19 @@
   function activateSettingsSection(sectionId, behavior = "smooth") {
     $$(`[data-settings-anchor]`).forEach((button) => button.classList.toggle("active", button.dataset.settingsAnchor === sectionId));
     $(`#${sectionId}`)?.scrollIntoView({ behavior, block: "start" });
+  }
+
+  function focusLicenseSettings() {
+    const section = $("#licenseSettings");
+    showView("settings");
+    activateSettingsSection("licenseSettings", "auto");
+    section.classList.remove("is-targeted");
+    requestAnimationFrame(() => {
+      section.classList.add("is-targeted");
+      $("#licenseCode").focus({ preventScroll: true });
+      clearTimeout(focusLicenseSettings.timer);
+      focusLicenseSettings.timer = setTimeout(() => section.classList.remove("is-targeted"), 1800);
+    });
   }
 
   function renderMedia() {
@@ -605,6 +631,23 @@
     const badge = $("#licenseStatus");
     badge.className = `license-status ${status.status || "unlicensed"}`;
     badge.textContent = LICENSE_STATUS_LABELS[status.status] || "状态未知";
+    const topStatus = $("#topLicenseStatus");
+    const topStatusText = $("span", topStatus);
+    topStatus.className = `top-license-status ${status.status || "unlicensed"}`;
+    if (status.status === "active" && status.expiresAt) {
+      topStatusText.textContent = `授权至 ${formatLicenseDate(status.expiresAt)}`;
+      topStatus.setAttribute("aria-label", `设备授权有效期至 ${formatLicenseDate(status.expiresAt, true)}，前往设备授权设置`);
+    } else if (status.status === "active") {
+      topStatusText.textContent = "永久授权";
+      topStatus.setAttribute("aria-label", "设备已永久授权，前往设备授权设置");
+    } else if (status.status === "development") {
+      topStatusText.textContent = "开发模式";
+      topStatus.setAttribute("aria-label", "开发模式不校验授权，前往设备授权设置");
+    } else {
+      topStatusText.textContent = LICENSE_STATUS_LABELS[status.status] || "授权异常";
+      topStatus.setAttribute("aria-label", `${topStatusText.textContent}，前往设备授权设置`);
+    }
+    topStatus.title = topStatus.getAttribute("aria-label");
     $("#licenseMessage").textContent = status.message || "无法读取设备授权状态";
     $("#licenseDeviceCode").textContent = status.deviceCode || "设备码不可用";
     $("#copyDeviceCode").disabled = !status.deviceCode;
@@ -671,6 +714,19 @@
   async function parseUrl(event) {
     event?.preventDefault();
     if (state.parsing) return;
+    try {
+      state.licenseStatus = await call(api.license.status());
+      renderLicenseStatus();
+    } catch (error) {
+      showToast("无法校验设备授权", error.message, "error");
+      focusLicenseSettings();
+      return;
+    }
+    if (!state.licenseStatus.active) {
+      showToast("请先完成设备授权", state.licenseStatus.message || "已跳转到设备授权设置", "error");
+      focusLicenseSettings();
+      return;
+    }
     const url = $("#sourceUrl").value.trim();
     state.parsing = true;
     $("#parseError").hidden = true;
@@ -692,7 +748,14 @@
       $("#parseError").textContent = error.message;
       $("#parseError").hidden = false;
       $("#parseHint").replaceChildren(append(element("span"), icon("scan-search"), document.createTextNode("自动识别文案中的首个链接 · 仅在本机解析")));
-      if (error.code === "AUTH_REQUIRED") {
+      if (error.code === "LICENSE_REQUIRED") {
+        try {
+          state.licenseStatus = await call(api.license.status());
+          renderLicenseStatus();
+        } catch {}
+        showToast("请先完成设备授权", error.message, "error");
+        focusLicenseSettings();
+      } else if (error.code === "AUTH_REQUIRED") {
         showToast("需要平台登录", "请完成对应平台登录后重新解析", "error");
         showView("settings");
         activateSettingsSection("authSettings", "auto");
@@ -933,6 +996,7 @@
     $("#chooseDirectory").addEventListener("click", async () => { try { const settings = await call(api.settings.chooseDownloadDirectory()); if (settings) { state.settings = settings; renderSettings(); showToast("默认目录已更新"); } } catch (error) { showToast("无法选择目录", error.message, "error"); } });
     $("#concurrencySelect").addEventListener("change", (event) => updateSettings({ concurrency: Number(event.target.value) }));
     $("#themeSelect").addEventListener("change", (event) => updateSettings({ theme: event.target.value }));
+    $("#topLicenseStatus").addEventListener("click", focusLicenseSettings);
     $("#themeToggle").addEventListener("click", () => updateSettings({ theme: document.body.dataset.theme === "dark" ? "light" : "dark" }));
     $("#installYtDlp").addEventListener("click", async (event) => { const button = event.currentTarget; button.disabled = true; button.setAttribute("aria-busy", "true"); $("span", button).textContent = "正在安装"; try { state.toolchain = await call(api.tools.installYtDlp()); renderToolchain(); showToast("yt-dlp 已安装并通过自检"); } catch (error) { showToast("安装失败", error.message, "error"); } finally { button.disabled = false; button.removeAttribute("aria-busy"); $("span", button).textContent = "安装/更新"; } });
     $("#minimizeButton").addEventListener("click", api.app.minimize);

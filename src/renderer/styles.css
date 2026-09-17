@@ -247,6 +247,50 @@ textarea {
   height: 100%;
 }
 
+.top-license-status {
+  min-height: 30px;
+  margin-right: 6px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.top-license-status:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+}
+
+.top-license-status svg {
+  width: 14px;
+  height: 14px;
+}
+
+.top-license-status.active,
+.top-license-status.development {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 46%, var(--border));
+}
+
+.top-license-status.unlicensed,
+.top-license-status.expired,
+.top-license-status.invalid,
+.top-license-status.device_mismatch,
+.top-license-status.unavailable {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger-soft) 68%, var(--surface-raised));
+}
+
 .autosave-label {
   display: inline-flex;
   align-items: center;
@@ -2542,6 +2586,15 @@ select,
 .license-status.device_mismatch::before,
 .license-status.unavailable::before {
   background: var(--danger);
+}
+
+.license-settings {
+  transition: background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.license-settings.is-targeted {
+  background: color-mix(in srgb, var(--primary-soft) 54%, transparent);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .license-device-row {

@@ -168,7 +168,10 @@ function registerIpc() {
     licenseStatus: licenseManager.getStatus(),
   }));
 
-  handle("media:parse", ({ url }) => mediaService.parse(url));
+  handle("media:parse", ({ url }) => {
+    licenseManager.requireActive();
+    return mediaService.parse(url);
+  });
   handle("media:cancel-parse", () => mediaService.cancel());
   handle("clipboard:read-text", () => clipboard.readText().slice(0, 20_000));
   handle("tasks:create", (payload) => {

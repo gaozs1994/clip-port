@@ -87,6 +87,21 @@ test("rejects tampered and expired licenses", async () => {
   }
 });
 
+test("refreshes an active license into expired state when status is requested", async () => {
+  const now = new Date("2026-09-17T00:00:00.000Z");
+  const context = harness({ now });
+  try {
+    const manager = context.create();
+    await manager.initialize();
+    manager.activate(context.issue({ expiresAt: "2026-09-18T00:00:00.000Z" }));
+    assert.equal(manager.getStatus().status, "active");
+    now.setTime(Date.parse("2026-09-18T00:00:00.001Z"));
+    assert.equal(manager.getStatus().status, "expired");
+  } finally {
+    fs.rmSync(context.directory, { recursive: true, force: true });
+  }
+});
+
 test("development mode remains active without storing a license", async () => {
   const context = harness({ enforce: false });
   try {

@@ -151,7 +151,7 @@ class LicenseManager {
   }
 
   getStatus() {
-    return { ...(this.state || this.refresh()) };
+    return { ...this.refresh() };
   }
 
   isActive() {
