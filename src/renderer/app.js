@@ -443,7 +443,10 @@
     const statusCell = element("div", "task-status-cell");
     const statusLine = element("div");
     const percent = Number(task.progress?.percent) || 0;
-    append(statusLine, element("span", task.state === "failed" ? "status-error" : "", `${stateLabel(task)}${task.state === "downloading" ? ` · ${percent.toFixed(0)}%` : ""}`), element("span", "", ACTIVE_STATES.has(task.state) && task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : task.stage || ""));
+    const speedText = task.state === "downloading"
+      ? task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"
+      : task.stage || "";
+    append(statusLine, element("span", task.state === "failed" ? "status-error" : "", `${stateLabel(task)}${task.state === "downloading" ? ` · ${percent.toFixed(0)}%` : ""}`), element("span", "", speedText));
     const progress = element("div", `progress-track${task.state === "processing" || task.state === "verifying" ? " processing" : ""}`);
     const value = element("span");
     if (!progress.classList.contains("processing")) value.style.width = `${Math.max(0, Math.min(100, percent))}%`;
@@ -452,7 +455,26 @@
     if (task.error?.message) statusCell.append(element("small", "", task.error.message));
 
     const sizeCell = element("div", "task-size-cell");
-    append(sizeCell, element("strong", "", formatBytes(task.progress?.downloadedBytes)), element("small", "", task.progress?.totalBytes ? `共 ${formatBytes(task.progress.totalBytes)}` : task.progress?.eta ? `约 ${task.progress.eta} 秒` : "大小未知"));
+    const downloadedBytes = Number(task.progress?.downloadedBytes) || 0;
+    const totalBytes = Number(task.progress?.totalBytes) || Number(task.media?.estimatedBytes) || 0;
+    const completed = task.state === "completed" && task.finalOutputs?.length;
+    const sizePrimary = completed && totalBytes
+      ? formatBytes(totalBytes)
+      : downloadedBytes
+        ? formatBytes(downloadedBytes)
+        : totalBytes
+          ? `约 ${formatBytes(totalBytes)}`
+          : "--";
+    const sizeSecondary = completed && totalBytes
+      ? "最终大小"
+      : downloadedBytes && totalBytes
+        ? `共 ${formatBytes(totalBytes)}`
+        : downloadedBytes
+          ? "已下载 · 总大小计算中"
+          : totalBytes
+            ? "预计大小"
+            : "大小计算中";
+    append(sizeCell, element("strong", "", sizePrimary), element("small", "", sizeSecondary));
     const actions = element("div", "task-actions-cell");
     if (ACTIVE_STATES.has(task.state)) actions.append(createIconButton("pause", "暂停任务", "pause", task.id));
     if (["paused", "failed", "interrupted"].includes(task.state)) actions.append(createIconButton("play", "继续任务", "resume", task.id));
@@ -465,7 +487,7 @@
 
   function renderTasks() {
     const counts = taskCounts();
-    const liveSpeed = state.tasks.reduce((sum, task) => sum + (ACTIVE_STATES.has(task.state) ? Number(task.progress?.speed) || 0 : 0), 0);
+    const liveSpeed = state.tasks.reduce((sum, task) => sum + (task.state === "downloading" ? Number(task.progress?.speed) || 0 : 0), 0);
     $("#metricActive").textContent = counts.active;
     $("#metricQueued").textContent = counts.queued;
     $("#metricCompleted").textContent = counts.completed;
@@ -496,12 +518,20 @@
     const thumb = element("span", `mini-thumb graphic-thumb ${["audio", "mp3"].includes(task.options?.preset) ? "navy" : ""}`);
     thumb.append(icon(["audio", "mp3"].includes(task.options?.preset) ? "music-2" : "download"));
     const copy = element("span", "queue-task-copy");
-    append(copy, element("strong", "", task.media?.title || "未命名任务"), element("small", "", `${stateLabel(task)}${task.progress?.speed ? ` · ${formatBytes(task.progress.speed)}/s` : ""}`));
+    const queueSpeed = task.state === "downloading" ? ` · ${task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"}` : "";
+    append(copy, element("strong", "", task.media?.title || "未命名任务"), element("small", "", `${stateLabel(task)}${queueSpeed}`));
     const action = ACTIVE_STATES.has(task.state) ? createIconButton("pause", "暂停任务", "pause", task.id) : task.state === "paused" ? createIconButton("play", "继续任务", "resume", task.id) : createIconButton("x", "取消任务", "cancel", task.id);
     action.classList.remove("bordered");
     append(head, thumb, copy, action);
     const meta = element("div", "progress-meta");
-    append(meta, element("span", "", `${Math.round(task.progress?.percent || 0)}%`), element("span", "", task.progress?.totalBytes ? `${formatBytes(task.progress.downloadedBytes)} / ${formatBytes(task.progress.totalBytes)}` : task.stage || "等待中"));
+    const downloadedBytes = Number(task.progress?.downloadedBytes) || 0;
+    const totalBytes = Number(task.progress?.totalBytes) || Number(task.media?.estimatedBytes) || 0;
+    const sizeText = totalBytes
+      ? `${formatBytes(downloadedBytes)} / ${totalBytes === task.media?.estimatedBytes && !task.progress?.totalBytes ? "约 " : ""}${formatBytes(totalBytes)}`
+      : downloadedBytes
+        ? `已下载 ${formatBytes(downloadedBytes)}`
+        : task.stage || "等待中";
+    append(meta, element("span", "", `${Math.round(task.progress?.percent || 0)}%`), element("span", "", sizeText));
     const track = element("div", `progress-track${task.state === "processing" || task.state === "verifying" ? " processing" : ""}`);
     const value = element("span"); value.style.width = `${Math.max(0, Math.min(100, task.progress?.percent || 0))}%`; track.append(value);
     append(row, head, meta, track);

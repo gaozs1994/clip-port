@@ -26,6 +26,46 @@ function tail(value, limit = 12_000) {
   return value.length <= limit ? value : value.slice(-limit);
 }
 
+function finiteNonNegative(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function mergeTaskProgress(previous = {}, update = {}, elapsedMs = 0) {
+  const previousDownloaded = finiteNonNegative(previous.downloadedBytes);
+  const downloadedBytes = finiteNonNegative(update.downloadedBytes) ?? previousDownloaded;
+  const totalBytes = finiteNonNegative(update.totalBytes) ?? finiteNonNegative(previous.totalBytes);
+  let speed = finiteNonNegative(update.speed);
+  if ((!speed || speed <= 0) && elapsedMs > 0 && downloadedBytes !== null && previousDownloaded !== null && downloadedBytes > previousDownloaded) {
+    speed = (downloadedBytes - previousDownloaded) * 1000 / elapsedMs;
+  }
+  if (!speed || speed <= 0) speed = finiteNonNegative(previous.speed);
+  let percent = finiteNonNegative(update.percent);
+  if (percent === null && totalBytes > 0 && downloadedBytes !== null) percent = downloadedBytes / totalBytes * 100;
+  if (percent === null) percent = finiteNonNegative(previous.percent);
+  return {
+    ...previous,
+    ...update,
+    downloadedBytes,
+    totalBytes,
+    speed,
+    eta: finiteNonNegative(update.eta) ?? finiteNonNegative(previous.eta),
+    percent: percent === null ? null : Math.max(0, Math.min(100, percent)),
+  };
+}
+
+function outputSize(paths = []) {
+  return paths.reduce((total, value) => {
+    try {
+      const stats = fs.statSync(value);
+      return stats.isFile() ? total + stats.size : total;
+    } catch {
+      return total;
+    }
+  }, 0);
+}
+
 class TaskManager {
   constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, canStartTask = () => true, onTaskChanged, onHistoryChanged }) {
     this.store = store;
@@ -99,6 +139,7 @@ class TaskManager {
         uploader: String(media.uploader || "未知来源").slice(0, 200),
         extractor: String(media.extractor || "unknown").slice(0, 100),
         duration: Number.isFinite(media.duration) ? media.duration : null,
+        estimatedBytes: Number.isFinite(media.best?.estimatedBytes) && media.best.estimatedBytes > 0 ? media.best.estimatedBytes : null,
       },
       downloadStrategy: media.downloadStrategy === "douyin-share" && isDouyinUrl(sourceUrl) ? "douyin-share" : "",
       redactedUrl: redactUrl(sourceUrl),
@@ -221,8 +262,9 @@ class TaskManager {
       } else if (event.type === "progress") {
         const time = Date.now();
         if (time - context.lastProgressAt < 250 && event.value.percent !== 100) return;
+        const progress = mergeTaskProgress(task.progress, event.value, context.lastProgressAt ? time - context.lastProgressAt : 0);
         context.lastProgressAt = time;
-        this.#save(task, { state: "downloading", stage: "正在下载", progress: event.value });
+        this.#save(task, { state: "downloading", stage: "正在下载", progress });
       }
     };
     let processHandle;
@@ -297,10 +339,18 @@ class TaskManager {
       }
     }
     const completedAt = now();
+    const finalBytes = outputSize(outputs);
     this.#save(task, {
       state: outputs.length ? "completed" : "partial",
       stage: outputs.length ? "下载完成" : "主体完成，未确认输出路径",
-      progress: { ...task.progress, percent: 100, speed: null, eta: 0 },
+      progress: {
+        ...task.progress,
+        percent: 100,
+        downloadedBytes: finalBytes || task.progress.downloadedBytes,
+        totalBytes: finalBytes || task.progress.totalBytes,
+        speed: null,
+        eta: 0,
+      },
       finalOutputs: outputs,
       completedAt,
     });
@@ -389,4 +439,4 @@ class TaskManager {
   }
 }
 
-module.exports = { TaskManager };
+module.exports = { TaskManager, mergeTaskProgress, outputSize };

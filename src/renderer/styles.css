@@ -1827,13 +1827,26 @@ select,
     row-gap: 10px;
   }
 
+  .task-name-cell {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .task-status-cell {
     grid-column: 1 / -1;
-    order: 3;
+    grid-row: 3;
   }
 
   .task-size-cell {
-    display: none;
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+  }
+
+  .task-size-cell small {
+    margin-top: 0;
   }
 
   .task-actions-cell {

@@ -82,6 +82,7 @@ test("progress parser handles unknown totals without inventing a percentage", ()
   assert.equal(event.type, "progress");
   assert.equal(event.value.downloadedBytes, 2048);
   assert.equal(event.value.totalBytes, null);
+  assert.equal(event.value.speed, 1024);
   assert.equal(event.value.percent, null);
   assert.equal(event.value.eta, 8);
 });

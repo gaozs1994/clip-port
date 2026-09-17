@@ -4,7 +4,30 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { AppStore } = require("../src/main/services/store.cjs");
-const { TaskManager } = require("../src/main/services/task-manager.cjs");
+const { TaskManager, mergeTaskProgress, outputSize } = require("../src/main/services/task-manager.cjs");
+
+test("preserves known progress metrics and derives speed when an update omits them", () => {
+  const previous = { percent: 10, downloadedBytes: 1_000, totalBytes: 10_000, speed: 500, eta: 18 };
+  const merged = mergeTaskProgress(previous, { percent: null, downloadedBytes: 3_000, totalBytes: null, speed: null, eta: null }, 2_000);
+  assert.equal(merged.downloadedBytes, 3_000);
+  assert.equal(merged.totalBytes, 10_000);
+  assert.equal(merged.speed, 1_000);
+  assert.equal(merged.percent, 30);
+  assert.equal(merged.eta, 18);
+});
+
+test("calculates final size from all output files", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-output-size-"));
+  try {
+    const first = path.join(directory, "first.mp4");
+    const second = path.join(directory, "second.srt");
+    fs.writeFileSync(first, Buffer.alloc(1_024));
+    fs.writeFileSync(second, Buffer.alloc(256));
+    assert.equal(outputSize([first, second, path.join(directory, "missing")]), 1_280);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("reserves launching tasks so rapid scheduling cannot start a task twice", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-schedule-"));
@@ -75,10 +98,11 @@ test("keeps queued tasks idle while the device license is inactive", () => {
   manager.create({
     url: "https://example.com/licensed",
     outputRoot: directory,
-    media: { id: "sample", title: "Sample", uploader: "Tester", extractor: "test" },
+    media: { id: "sample", title: "Sample", uploader: "Tester", extractor: "test", best: { estimatedBytes: 12_345 } },
   });
 
   assert.equal(store.listTasks()[0].state, "queued");
+  assert.equal(store.listTasks()[0].media.estimatedBytes, 12_345);
   assert.equal(toolchain.calls, 0);
   assert.equal(manager.launching.size, 0);
   fs.rmSync(directory, { recursive: true, force: true });
