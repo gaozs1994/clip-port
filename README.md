@@ -10,7 +10,7 @@ ClipPort 是一款基于 Electron、yt-dlp 和 FFmpeg/ffprobe 的本地视频解
 - 暂停、继续、取消、失败重试与异常退出恢复
 - 完成历史、打开文件和打开所在目录
 - 浅色、深色及跟随系统主题
-- yt-dlp 官方版本安装与 SHA-512 校验
+- 安装包内置经过官方 SHA-512 校验的 yt-dlp，并支持后续手动更新
 - 内置 FFmpeg/ffprobe，自定义工具路径可覆盖
 - 抖音、哔哩哔哩、YouTube、小红书隔离登录会话与 Cookie 状态校验
 - Windows 设备码与 Ed25519 离线授权
@@ -25,7 +25,7 @@ npm install
 npm start
 ```
 
-首次启动若未检测到 yt-dlp，进入“设置 > 工具链”选择“安装/更新”。应用只从 yt-dlp 官方 GitHub Release 获取对应平台文件，并在启用前校验官方 SHA-512 清单。
+Windows 安装包已内置 yt-dlp、FFmpeg 和 ffprobe，安装后无需另行下载依赖即可开始解析。设置页仍可手动更新 yt-dlp；应用只从 yt-dlp 官方 GitHub Release 获取文件，并在启用前校验官方 SHA-512 清单。
 
 ## 验证与打包
 
@@ -37,6 +37,8 @@ npm run build
 ```
 
 `npm run build` 会生成可直接运行的 `dist/win-unpacked/ClipPort.exe`。`npm run dist` 用于生成 Windows NSIS 安装包。
+
+打包前会执行 `npm run prepare:ytdlp`，下载当前官方 stable Windows x64 版本、核对 `SHA2-512SUMS`，再将通过校验的 `yt-dlp.exe` 写入安装包。可设置 `CLIPPORT_YTDLP_VERSION`（例如 `2025.08.22`）固定构建版本；未设置时使用最新 stable 版本。
 
 ## 设备授权签发
 

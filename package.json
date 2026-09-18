@@ -8,6 +8,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "prepare:renderer": "node scripts/vendor-assets.cjs",
+    "prepare:ytdlp": "node scripts/prepare-ytdlp.cjs",
     "postinstall": "node scripts/vendor-assets.cjs",
     "start": "npm run prepare:renderer && electron .",
     "dev": "npm start",
@@ -16,8 +17,8 @@
     "test": "node --test",
     "license:keygen": "node scripts/license-issuer.cjs generate-key",
     "license:issue": "node scripts/license-issuer.cjs issue",
-    "build": "npm run check && npm test && npm run prepare:renderer && electron-builder --dir",
-    "dist": "npm run check && npm test && npm run prepare:renderer && electron-builder --win nsis --publish never"
+    "build": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && electron-builder --dir",
+    "dist": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -35,6 +36,12 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/ffmpeg-ffprobe-static/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/yt-dlp/win32-x64/yt-dlp.exe",
+        "to": "tools/yt-dlp.exe"
+      }
     ],
     "files": [
       "src/**/*",

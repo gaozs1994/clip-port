@@ -1028,7 +1028,7 @@
     $("#themeSelect").addEventListener("change", (event) => updateSettings({ theme: event.target.value }));
     $("#topLicenseStatus").addEventListener("click", focusLicenseSettings);
     $("#themeToggle").addEventListener("click", () => updateSettings({ theme: document.body.dataset.theme === "dark" ? "light" : "dark" }));
-    $("#installYtDlp").addEventListener("click", async (event) => { const button = event.currentTarget; button.disabled = true; button.setAttribute("aria-busy", "true"); $("span", button).textContent = "正在安装"; try { state.toolchain = await call(api.tools.installYtDlp()); renderToolchain(); showToast("yt-dlp 已安装并通过自检"); } catch (error) { showToast("安装失败", error.message, "error"); } finally { button.disabled = false; button.removeAttribute("aria-busy"); $("span", button).textContent = "安装/更新"; } });
+    $("#installYtDlp").addEventListener("click", async (event) => { const button = event.currentTarget; button.disabled = true; button.setAttribute("aria-busy", "true"); $("span", button).textContent = "正在更新"; try { state.toolchain = await call(api.tools.installYtDlp()); renderToolchain(); showToast("yt-dlp 已更新并通过自检"); } catch (error) { showToast("更新失败", error.message, "error"); } finally { button.disabled = false; button.removeAttribute("aria-busy"); $("span", button).textContent = "检查更新"; } });
     $("#minimizeButton").addEventListener("click", api.app.minimize);
     $("#maximizeButton").addEventListener("click", api.app.toggleMaximize);
     $("#closeButton").addEventListener("click", api.app.close);

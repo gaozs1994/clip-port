@@ -3,6 +3,7 @@ dist/
 .playwright-cli/
 output/
 tools/
+vendor/yt-dlp/
 .local-license/
 *.log
 .DS_Store

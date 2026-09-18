@@ -36,6 +36,8 @@ jobs:
         run: npm version --no-git-tag-version "0.1.${{ github.run_number }}"
 
       - name: Build Windows installer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run dist
 
       - name: Publish GitHub Release

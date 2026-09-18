@@ -69,10 +69,16 @@ function ytDlpAssetName() {
 }
 
 class ToolchainManager {
-  constructor({ store, userDataPath, onStatus }) {
+  constructor({ store, userDataPath, onStatus, resourcesPath = process.resourcesPath, appRoot = path.resolve(__dirname, "..", "..", "..") }) {
     this.store = store;
     this.onStatus = onStatus;
     this.toolDirectory = path.join(userDataPath, "tools");
+    this.bundledYtDlpPath = process.platform === "win32"
+      ? path.join(resourcesPath, "tools", "yt-dlp.exe")
+      : "";
+    this.developmentYtDlpPath = process.platform === "win32"
+      ? path.join(appRoot, "vendor", "yt-dlp", "win32-x64", "yt-dlp.exe")
+      : "";
     this.cachedStatus = null;
     this.cacheTime = 0;
   }
@@ -86,6 +92,8 @@ class ToolchainManager {
     if (isExecutableFile(configured)) return { path: configured, source: "自定义" };
     const managed = this.managedYtDlpPath();
     if (isExecutableFile(managed)) return { path: managed, source: "ClipPort 管理" };
+    const bundled = [this.bundledYtDlpPath, this.developmentYtDlpPath].find(isExecutableFile) || "";
+    if (bundled) return { path: bundled, source: "应用内置" };
     const fromPath = await findOnPath(process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
     return { path: fromPath, source: fromPath ? "系统 PATH" : "未安装" };
   }
