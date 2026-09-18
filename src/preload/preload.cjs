@@ -56,6 +56,13 @@ contextBridge.exposeInMainWorld("clipport", {
     activate: (code) => invoke("license:activate", { code }),
     clear: () => invoke("license:clear"),
   },
+  voicebox: {
+    status: () => invoke("voicebox:status"),
+    generate: (payload) => invoke("voicebox:generate", payload),
+    cancel: (id) => invoke("voicebox:cancel", { id }),
+    saveAudio: (id) => invoke("voicebox:save-audio", { id }),
+    openDownload: () => invoke("voicebox:open-download"),
+  },
   files: {
     open: (recordType, id) => invoke("files:open", { recordType, id }),
     reveal: (recordType, id) => invoke("files:reveal", { recordType, id }),
@@ -68,5 +75,6 @@ contextBridge.exposeInMainWorld("clipport", {
     onAuthChanged: (callback) => subscribe("auth:changed", callback),
     onUpdateStatus: (callback) => subscribe("updates:changed", callback),
     onLicenseStatus: (callback) => subscribe("license:changed", callback),
+    onVoiceboxGenerationStatus: (callback) => subscribe("voicebox:generation-status", callback),
   },
 });

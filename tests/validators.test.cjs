@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   assertHttpUrl,
+  assertVoiceboxGeneration,
+  assertVoiceboxGenerationId,
   canPersistCanonicalUrl,
   extractHttpUrl,
   redactUrl,
@@ -50,4 +52,24 @@ test("normalizes task options to a bounded public contract", () => {
 test("rejects concurrency outside the supported range", () => {
   assert.throws(() => sanitizeSettingsPatch({ concurrency: 0 }), { code: "INVALID_SETTINGS" });
   assert.equal(sanitizeSettingsPatch({ concurrency: 3 }).concurrency, 3);
+});
+
+test("bounds Voicebox generation input and requires voice consent", () => {
+  assert.deepEqual(assertVoiceboxGeneration({
+    profileId: "a1111111-1111-4111-8111-111111111111",
+    text: "  你好，ClipPort。  ",
+    language: "zh",
+    instruct: "温和、清晰",
+    personality: true,
+    consent: true,
+  }), {
+    profileId: "a1111111-1111-4111-8111-111111111111",
+    text: "你好，ClipPort。",
+    language: "zh",
+    instruct: "温和、清晰",
+    personality: true,
+  });
+  assert.throws(() => assertVoiceboxGeneration({ profileId: "valid-profile", text: "hello", consent: false }), { code: "VOICE_CONSENT_REQUIRED" });
+  assert.throws(() => assertVoiceboxGeneration({ profileId: "../profile", text: "hello", consent: true }), { code: "INVALID_VOICE_PROFILE" });
+  assert.equal(assertVoiceboxGenerationId("a1111111-1111-4111-8111-111111111111"), "a1111111-1111-4111-8111-111111111111");
 });

@@ -17,9 +17,16 @@ function harness({ deviceCode = DEVICE_CODE, now = new Date("2026-09-17T00:00:00
     encryptString: (value) => Buffer.from(`protected:${value}`, "utf8"),
     decryptString: (value) => value.toString("utf8").replace(/^protected:/, ""),
   };
+  let persistentCode = "";
+  const persistentStore = {
+    read: () => persistentCode,
+    write: (code) => { persistentCode = code; },
+    clear: () => { persistentCode = ""; },
+  };
   const create = () => new LicenseManager({
     deviceIdentity: { getCode: async () => deviceCode },
     safeStorage,
+    persistentStore,
     userDataPath: directory,
     publicKey,
     enforce,
@@ -53,6 +60,45 @@ test("activates a signed license for this device and restores it after restart",
     await restarted.initialize();
     assert.equal(restarted.getStatus().status, "active");
     assert.equal(restarted.requireActive(), true);
+  } finally {
+    fs.rmSync(context.directory, { recursive: true, force: true });
+  }
+});
+
+test("restores an active license from update-safe storage when the user data copy is missing", async () => {
+  const context = harness();
+  try {
+    const first = context.create();
+    await first.initialize();
+    first.activate(context.issue());
+    fs.rmSync(path.join(context.directory, "license.dat"), { force: true });
+
+    const updated = context.create();
+    await updated.initialize();
+    assert.equal(updated.getStatus().status, "active");
+    assert.equal(fs.existsSync(path.join(context.directory, "license.dat")), true);
+
+    updated.clear();
+    fs.rmSync(path.join(context.directory, "license.dat"), { force: true });
+    const cleared = context.create();
+    await cleared.initialize();
+    assert.equal(cleared.getStatus().status, "unlicensed");
+  } finally {
+    fs.rmSync(context.directory, { recursive: true, force: true });
+  }
+});
+
+test("prefers the valid update-safe copy when the user data copy is corrupted", async () => {
+  const context = harness();
+  try {
+    const first = context.create();
+    await first.initialize();
+    first.activate(context.issue());
+    fs.writeFileSync(path.join(context.directory, "license.dat"), "protected:not-a-license");
+
+    const updated = context.create();
+    await updated.initialize();
+    assert.equal(updated.getStatus().status, "active");
   } finally {
     fs.rmSync(context.directory, { recursive: true, force: true });
   }

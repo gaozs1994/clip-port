@@ -62,9 +62,10 @@ function createLicenseCode(payload, privateKey) {
 }
 
 class LicenseManager {
-  constructor({ deviceIdentity, safeStorage, userDataPath, publicKey, enforce = true, now = () => new Date(), onStatus = () => {} }) {
+  constructor({ deviceIdentity, safeStorage, persistentStore = null, userDataPath, publicKey, enforce = true, now = () => new Date(), onStatus = () => {} }) {
     this.deviceIdentity = deviceIdentity;
     this.safeStorage = safeStorage;
+    this.persistentStore = persistentStore;
     this.file = path.join(userDataPath, "license.dat");
     this.publicKey = publicKey;
     this.enforce = enforce;
@@ -90,12 +91,26 @@ class LicenseManager {
   }
 
   readStoredCode() {
-    if (!fs.existsSync(this.file) || !this.safeStorage?.isEncryptionAvailable()) return "";
-    try {
-      return this.safeStorage.decryptString(fs.readFileSync(this.file));
-    } catch {
-      return "";
+    if (fs.existsSync(this.file) && this.safeStorage?.isEncryptionAvailable()) {
+      try {
+        const code = this.safeStorage.decryptString(fs.readFileSync(this.file));
+        const status = this.evaluate(code).status;
+        if (status === "active" || status === "expired") {
+          try { this.persistentStore?.write(code); } catch {}
+          return code;
+        }
+      } catch {}
     }
+
+    let recovered = "";
+    try { recovered = this.persistentStore?.read() || ""; } catch {}
+    if (recovered && this.safeStorage?.isEncryptionAvailable()) {
+      try {
+        fs.mkdirSync(path.dirname(this.file), { recursive: true });
+        fs.writeFileSync(this.file, this.safeStorage.encryptString(recovered), { mode: 0o600 });
+      } catch {}
+    }
+    return recovered;
   }
 
   baseState(status, message, extra = {}) {
@@ -184,6 +199,7 @@ class LicenseManager {
     }
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, this.safeStorage.encryptString(decoded.code), { mode: 0o600 });
+    try { this.persistentStore?.write(decoded.code); } catch {}
     this.licenseCode = decoded.code;
     this.refresh();
     this.onStatus(this.getStatus());
@@ -192,6 +208,7 @@ class LicenseManager {
 
   clear() {
     fs.rmSync(this.file, { force: true });
+    try { this.persistentStore?.clear(); } catch {}
     this.licenseCode = "";
     this.refresh();
     this.onStatus(this.getStatus());

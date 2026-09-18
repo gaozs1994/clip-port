@@ -23,6 +23,8 @@ const { DouyinResolver } = require("./services/douyin-resolver.cjs");
 const { UpdateManager } = require("./services/update-manager.cjs");
 const { DeviceIdentity } = require("./services/device-identity.cjs");
 const { LicenseManager } = require("./services/license-manager.cjs");
+const { WindowsLicenseStore } = require("./services/windows-license-store.cjs");
+const { VoiceboxService } = require("./services/voicebox-service.cjs");
 const { AppError, assertTaskId, sanitizeSettingsPatch } = require("./services/validators.cjs");
 
 protocol.registerSchemesAsPrivileged([
@@ -41,6 +43,7 @@ let cookieManager = null;
 let douyinResolver = null;
 let updateManager = null;
 let licenseManager = null;
+let voiceboxService = null;
 let shutdownStarted = false;
 const smokeTest = process.env.CLIPPORT_SMOKE_TEST === "1";
 
@@ -81,10 +84,15 @@ function rendererRoot() {
 }
 
 function setupProtocol() {
-  protocol.handle("clipport", (request) => {
+  protocol.handle("clipport", async (request) => {
     const requestUrl = new URL(request.url);
     if (requestUrl.host !== "app") return new Response("Not found", { status: 404 });
     const relative = decodeURIComponent(requestUrl.pathname.replace(/^\/+/, "") || "index.html");
+    const voiceboxAudioMatch = relative.match(/^voicebox-audio\/([a-f0-9-]{20,64})$/i);
+    if (voiceboxAudioMatch) {
+      if (!voiceboxService) return new Response("Voicebox unavailable", { status: 503 });
+      return voiceboxService.audioResponse(voiceboxAudioMatch[1]);
+    }
     const root = rendererRoot();
     const target = path.resolve(root, relative);
     if (target !== root && !target.startsWith(`${root}${path.sep}`)) return new Response("Forbidden", { status: 403 });
@@ -156,17 +164,25 @@ function findOutput(recordType, id) {
 }
 
 function registerIpc() {
-  handle("app:bootstrap", async () => ({
-    appVersion: app.getVersion(),
-    platform: process.platform,
-    settings: store.getSettings(),
-    tasks: taskManager.list(),
-    history: taskManager.history(),
-    toolchain: await toolchain.getStatus({ fresh: true }),
-    authPlatforms: await cookieManager.list(),
-    updateStatus: updateManager.getStatus(),
-    licenseStatus: licenseManager.getStatus(),
-  }));
+  handle("app:bootstrap", async () => {
+    const [toolchainStatus, authPlatforms, voiceboxStatus] = await Promise.all([
+      toolchain.getStatus({ fresh: true }),
+      cookieManager.list(),
+      voiceboxService.getStatus(),
+    ]);
+    return {
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      settings: store.getSettings(),
+      tasks: taskManager.list(),
+      history: taskManager.history(),
+      toolchain: toolchainStatus,
+      authPlatforms,
+      voiceboxStatus,
+      updateStatus: updateManager.getStatus(),
+      licenseStatus: licenseManager.getStatus(),
+    };
+  });
 
   handle("media:parse", ({ url }) => {
     licenseManager.requireActive();
@@ -266,6 +282,26 @@ function registerIpc() {
     return result.response === 1 ? licenseManager.clear() : null;
   });
 
+  handle("voicebox:status", () => voiceboxService.getStatus());
+  handle("voicebox:generate", (payload) => {
+    licenseManager.requireActive();
+    return voiceboxService.startGeneration(payload);
+  });
+  handle("voicebox:cancel", ({ id }) => voiceboxService.cancelGeneration(id));
+  handle("voicebox:save-audio", async ({ id }) => {
+    licenseManager.requireActive();
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: "保存生成语音",
+      defaultPath: path.join(app.getPath("downloads"), `ClipPort-voice-${new Date().toISOString().replace(/[:.]/g, "-")}.wav`),
+      filters: [{ name: "WAV 音频", extensions: ["wav"] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const audio = await voiceboxService.downloadAudio(id);
+    fs.writeFileSync(result.filePath, audio);
+    return result.filePath;
+  });
+  handle("voicebox:open-download", () => shell.openExternal("https://github.com/jamiepine/voicebox/releases/latest"));
+
   handle("files:open", async ({ recordType, id }) => {
     const output = findOutput(recordType, id);
     if (!output) throw new AppError("FILE_MISSING", "输出文件不存在");
@@ -310,6 +346,7 @@ async function initialize() {
   licenseManager = new LicenseManager({
     deviceIdentity: new DeviceIdentity(),
     safeStorage,
+    persistentStore: new WindowsLicenseStore(),
     userDataPath: app.getPath("userData"),
     publicKey: fs.readFileSync(path.join(__dirname, "license-public-key.pem"), "utf8"),
     enforce: app.isPackaged,
@@ -329,6 +366,9 @@ async function initialize() {
     userDataPath: app.getPath("userData"),
     onStatus: (status) => send("tools:changed", status),
   });
+  voiceboxService = new VoiceboxService({
+    onGenerationStatus: (status) => send("voicebox:generation-status", status),
+  });
   douyinResolver = new DouyinResolver();
   mediaService = new MediaService({ toolchain, cookieManager, douyinResolver });
   taskManager = new TaskManager({
@@ -346,12 +386,18 @@ async function initialize() {
     app,
     dialog,
     getParentWindow: () => mainWindow,
-    onStatus: (status) => send("updates:changed", status),
+    onStatus: (status) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setProgressBar(status.status === "downloading" ? Math.max(0, Math.min(1, Number(status.progress) / 100 || 0)) : -1);
+      }
+      send("updates:changed", status);
+    },
     beforeInstall: async () => {
       shutdownStarted = true;
       updateManager.shutdown();
       await taskManager.shutdown();
       cookieManager.shutdown();
+      voiceboxService.shutdown();
     },
   });
   registerIpc();
@@ -377,6 +423,7 @@ app.on("before-quit", (event) => {
   shutdownStarted = true;
   taskManager.shutdown().finally(() => {
     cookieManager?.shutdown();
+    voiceboxService?.shutdown();
     app.quit();
   });
 });

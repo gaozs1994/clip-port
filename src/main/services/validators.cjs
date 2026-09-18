@@ -19,6 +19,7 @@ const TASK_STATES = new Set([
   "interrupted",
 ]);
 const PRESETS = new Set(["recommended", "best", "mp4", "audio", "mp3", "subtitles"]);
+const VOICEBOX_LANGUAGES = new Set(["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it", "he", "ar", "da", "el", "fi", "hi", "ms", "nl", "no", "pl", "sv", "sw", "tr"]);
 const URL_DELIMITER = /[\s<>"'`()\[\]{}【】（）《》，。！？；：、…]/u;
 const TRAILING_URL_PUNCTUATION = /[.,!?;:，。！？；：、]+$/u;
 
@@ -103,6 +104,24 @@ function assertTaskId(value) {
   return value;
 }
 
+function assertVoiceboxGenerationId(value) {
+  if (typeof value !== "string" || !/^[a-f0-9-]{20,64}$/i.test(value)) {
+    throw new AppError("INVALID_VOICEBOX_GENERATION", "语音生成标识无效");
+  }
+  return value;
+}
+
+function assertVoiceboxGeneration(input = {}) {
+  const profileId = typeof input.profileId === "string" ? input.profileId.trim() : "";
+  if (!/^[a-z0-9-]{1,100}$/i.test(profileId)) throw new AppError("INVALID_VOICE_PROFILE", "请选择有效的声音档案");
+  const text = typeof input.text === "string" ? input.text.trim() : "";
+  if (!text || text.length > 10_000) throw new AppError("INVALID_VOICE_TEXT", "语音文案需为 1 到 10000 个字符");
+  const language = VOICEBOX_LANGUAGES.has(input.language) ? input.language : "zh";
+  const instruct = typeof input.instruct === "string" ? input.instruct.trim().slice(0, 500) : "";
+  if (input.consent !== true) throw new AppError("VOICE_CONSENT_REQUIRED", "请确认你拥有该声音的使用授权");
+  return { profileId, text, language, instruct, personality: Boolean(input.personality) };
+}
+
 function assertOutputDirectory(value) {
   if (typeof value !== "string" || !path.isAbsolute(value) || value.length > 1024) {
     throw new AppError("INVALID_DIRECTORY", "请选择有效的保存目录");
@@ -175,6 +194,8 @@ module.exports = {
   assertHttpUrl,
   assertOutputDirectory,
   assertTaskId,
+  assertVoiceboxGeneration,
+  assertVoiceboxGenerationId,
   canPersistCanonicalUrl,
   extractHttpUrl,
   fingerprintUrl,

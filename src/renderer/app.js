@@ -31,6 +31,16 @@
     unavailable: "设备码不可用",
     development: "开发模式",
   };
+  const VOICEBOX_ENGINE_LABELS = {
+    qwen: "Qwen3-TTS",
+    qwen_custom_voice: "Qwen CustomVoice",
+    luxtts: "LuxTTS",
+    chatterbox: "Chatterbox Multilingual",
+    chatterbox_turbo: "Chatterbox Turbo",
+    tada: "HumeAI TADA",
+    kokoro: "Kokoro",
+  };
+  const VOICEBOX_ACTIVE_STATES = new Set(["queued", "loading_model", "generating"]);
   const ACTIVE_STATES = new Set(["preparing", "downloading", "processing", "verifying", "pausing", "canceling"]);
   const state = {
     appVersion: "--",
@@ -41,7 +51,9 @@
     tasks: [],
     history: [],
     authPlatforms: [],
-    updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, message: "启动后自动检查更新" },
+    voiceboxStatus: { available: false, message: "正在连接 Voicebox", profiles: [], checkedAt: "" },
+    voiceboxGeneration: null,
+    updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "启动后自动检查更新" },
     licenseStatus: { status: "unlicensed", active: false, hasLicense: false, deviceCode: "", message: "正在读取设备授权状态" },
     preset: "recommended",
     taskFilter: "all",
@@ -84,7 +96,7 @@
   }
 
   function createDemoApi() {
-    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set(), update: new Set(), license: new Set() };
+    const listeners = { task: new Set(), history: new Set(), tool: new Set(), auth: new Set(), update: new Set(), license: new Set(), voicebox: new Set() };
     const demoSettings = { downloadDirectory: "C:\\Users\\Public\\Downloads\\ClipPort", concurrency: 2, theme: "dark", toolPaths: {} };
     const demoTools = {
       ready: true,
@@ -102,16 +114,33 @@
       { id: "youtube", name: "YouTube", domain: "youtube.com", status: "not_connected", message: "未检测到登录状态", cookieCount: 0, expiresAt: "", lastCheckedAt: "", lastVerifiedAt: "" },
       { id: "xiaohongshu", name: "小红书", domain: "xiaohongshu.com", status: "invalid", message: "Cookie 不完整，请重新登录", cookieCount: 2, expiresAt: "", lastCheckedAt: new Date().toISOString(), lastVerifiedAt: "" },
     ];
-    let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, message: "可手动检查更新" };
+    let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "可手动检查更新" };
     const demoIssuedAt = new Date();
     const demoExpiresAt = new Date(demoIssuedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
     let demoLicenseStatus = { status: "active", active: true, hasLicense: true, deviceCode: "CPD1-DEMO-0000-0000-0000-0000-0000-0000", licenseId: "preview-license", holder: "预览用户", issuedAt: demoIssuedAt.toISOString(), expiresAt: demoExpiresAt.toISOString(), message: "设备已授权" };
+    const demoVoiceboxStatus = {
+      available: true,
+      message: "Voicebox 本地服务已连接",
+      version: "0.5.0",
+      backend: "cuda",
+      gpuAvailable: true,
+      gpuType: "CUDA",
+      modelLoaded: true,
+      checkedAt: new Date().toISOString(),
+      profiles: [
+        { id: "a1111111-1111-4111-8111-111111111111", name: "叙事女声", description: "清晰、自然，适合视频旁白", language: "zh", voiceType: "preset", engine: "qwen_custom_voice", hasPersonality: true, sampleCount: 0, generationCount: 18 },
+        { id: "b2222222-2222-4222-8222-222222222222", name: "我的声音", description: "已授权的本地克隆档案", language: "zh", voiceType: "cloned", engine: "qwen", hasPersonality: false, sampleCount: 2, generationCount: 7 },
+      ],
+    };
     let timer = null;
+    let voiceTimer = null;
+    let voiceCompletionTimer = null;
 
     const emitTask = (task) => listeners.task.forEach((callback) => callback(structuredClone(task)));
     const emitAuth = (platform) => listeners.auth.forEach((callback) => callback(structuredClone(platform)));
     const emitUpdate = () => listeners.update.forEach((callback) => callback(structuredClone(demoUpdateStatus)));
     const emitLicense = () => listeners.license.forEach((callback) => callback(structuredClone(demoLicenseStatus)));
+    const emitVoicebox = (status) => listeners.voicebox.forEach((callback) => callback(structuredClone(status)));
     const findDemoAuth = (platformId) => demoAuthPlatforms.find((platform) => platform.id === platformId);
     const progressDemo = (task) => {
       if (timer) clearInterval(timer);
@@ -135,7 +164,7 @@
 
     return {
       app: {
-        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms, updateStatus: demoUpdateStatus, licenseStatus: demoLicenseStatus }),
+        bootstrap: () => ok({ appVersion: "0.1.0-preview", platform: "browser", settings: demoSettings, tasks: demoTasks, history: demoHistory, toolchain: demoTools, authPlatforms: demoAuthPlatforms, voiceboxStatus: demoVoiceboxStatus, updateStatus: demoUpdateStatus, licenseStatus: demoLicenseStatus }),
         minimize: () => {}, toggleMaximize: () => {}, close: () => {},
       },
       clipboard: { readText: async () => ({ ok: true, data: await navigator.clipboard?.readText().catch(() => "") || "" }) },
@@ -189,9 +218,17 @@
         status: () => ok(structuredClone(demoUpdateStatus)),
         check: async () => {
           demoUpdateStatus = { ...demoUpdateStatus, status: "checking", message: "正在检查新版本" }; emitUpdate(); await sleep(450);
-          demoUpdateStatus = { ...demoUpdateStatus, status: "current", message: "已是最新版本" }; emitUpdate(); return ok(structuredClone(demoUpdateStatus));
+          demoUpdateStatus = { ...demoUpdateStatus, status: "available", latestVersion: "0.1.1-preview", message: "发现新版本 0.1.1-preview" }; emitUpdate(); return ok(structuredClone(demoUpdateStatus));
         },
-        download: () => ok(structuredClone(demoUpdateStatus)),
+        download: async () => {
+          const totalBytes = 96 * 1024 * 1024;
+          for (const percent of [0, 18, 43, 72, 100]) {
+            demoUpdateStatus = { ...demoUpdateStatus, status: percent === 100 ? "downloaded" : "downloading", progress: percent, downloadedBytes: totalBytes * percent / 100, totalBytes, bytesPerSecond: percent === 100 ? 0 : 6.4 * 1024 * 1024, message: percent === 100 ? "更新已下载，等待重启安装" : `正在下载更新 ${percent}%` };
+            emitUpdate();
+            await sleep(350);
+          }
+          return ok(structuredClone(demoUpdateStatus));
+        },
         install: () => ok(false),
       },
       license: {
@@ -205,6 +242,20 @@
         },
         clear: () => { demoLicenseStatus = { ...demoLicenseStatus, status: "unlicensed", active: false, hasLicense: false, licenseId: "", holder: "", issuedAt: "", expiresAt: "", message: "尚未绑定授权码" }; emitLicense(); return ok(structuredClone(demoLicenseStatus)); },
       },
+      voicebox: {
+        status: () => ok(structuredClone(demoVoiceboxStatus)),
+        generate: (payload) => {
+          const generation = { id: crypto.randomUUID(), status: "generating", duration: null, error: "", profileId: payload.profileId };
+          clearTimeout(voiceTimer);
+          clearTimeout(voiceCompletionTimer);
+          voiceTimer = setTimeout(() => emitVoicebox({ ...generation, status: "loading_model" }), 350);
+          voiceCompletionTimer = setTimeout(() => emitVoicebox({ ...generation, status: "completed", duration: 8.4, audioUrl: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" }), 1600);
+          return ok(generation);
+        },
+        cancel: (id) => { clearTimeout(voiceTimer); clearTimeout(voiceCompletionTimer); const update = { id, status: "canceled", duration: null, error: "已取消生成" }; emitVoicebox(update); return ok(update); },
+        saveAudio: () => ok("C:\\Users\\Public\\Downloads\\ClipPort-voice.wav"),
+        openDownload: () => ok(true),
+      },
       files: { open: () => ok(true), reveal: () => ok(true), openDownloadDirectory: () => ok(true) },
       events: {
         onTaskChanged: (callback) => { listeners.task.add(callback); return () => listeners.task.delete(callback); },
@@ -213,6 +264,7 @@
         onAuthChanged: (callback) => { listeners.auth.add(callback); return () => listeners.auth.delete(callback); },
         onUpdateStatus: (callback) => { listeners.update.add(callback); return () => listeners.update.delete(callback); },
         onLicenseStatus: (callback) => { listeners.license.add(callback); return () => listeners.license.delete(callback); },
+        onVoiceboxGenerationStatus: (callback) => { listeners.voicebox.add(callback); return () => listeners.voicebox.delete(callback); },
       },
     };
   }
@@ -290,7 +342,7 @@
   }
 
   function showView(view) {
-    state.view = ["download", "tasks", "history", "settings"].includes(view) ? view : "download";
+    state.view = ["download", "voice", "tasks", "history", "settings"].includes(view) ? view : "download";
     $$("[data-view]").forEach((section) => {
       const active = section.dataset.view === state.view;
       section.hidden = !active;
@@ -351,6 +403,99 @@
       placeholder.hidden = false;
     }
     $("#downloadDestination").textContent = state.settings.downloadDirectory;
+    refreshIcons();
+  }
+
+  function selectedVoiceProfile() {
+    const profiles = state.voiceboxStatus?.profiles || [];
+    return profiles.find((profile) => profile.id === $("#voiceProfile").value) || profiles[0] || null;
+  }
+
+  function renderVoiceProfile(syncLanguage = false) {
+    const profile = selectedVoiceProfile();
+    if (!profile) return;
+    $("#voiceProfileName").textContent = profile.name;
+    const type = profile.voiceType === "preset" ? "预设音色" : profile.voiceType === "cloned" ? "克隆音色" : "声音档案";
+    const engine = VOICEBOX_ENGINE_LABELS[profile.engine] || profile.engine || "自动选择";
+    const samples = profile.sampleCount ? ` · ${profile.sampleCount} 个样本` : "";
+    $("#voiceProfileDetail").textContent = `${type} · ${engine}${samples}`;
+    if (syncLanguage && $("#voiceLanguage").querySelector(`option[value="${profile.language}"]`)) {
+      $("#voiceLanguage").value = profile.language;
+    }
+    $("#voicePersonality").disabled = !profile.hasPersonality;
+    if (!profile.hasPersonality) $("#voicePersonality").checked = false;
+    $("#voiceOutputEngine").textContent = engine;
+  }
+
+  function renderVoiceboxGeneration() {
+    const generation = state.voiceboxGeneration;
+    const status = generation?.status || "idle";
+    const active = VOICEBOX_ACTIVE_STATES.has(status);
+    const labels = {
+      idle: ["等待生成", "生成完成后可在这里试听"],
+      queued: ["已加入队列", "Voicebox 将依次处理本机生成任务"],
+      loading_model: ["正在加载模型", "首次使用模型时可能需要更长时间"],
+      generating: ["正在生成语音", "请保持 Voicebox 运行"],
+      completed: ["生成完成", generation?.duration ? `已生成 ${generation.duration.toFixed(1)} 秒语音` : "可以试听或保存音频"],
+      failed: ["生成失败", generation?.error || "请检查 Voicebox 模型状态后重试"],
+      not_found: ["任务不存在", "Voicebox 中未找到该生成任务"],
+      canceled: ["已取消生成", "可修改文案后重新生成"],
+    };
+    const [title, detail] = labels[status] || ["正在处理", "请稍候"];
+    const stage = $("#voiceOutputStage");
+    stage.className = `voice-output-stage ${status}`;
+    stage.setAttribute("aria-busy", String(active));
+    $("#voiceOutputStatus").textContent = title;
+    $("#voiceOutputDetail").textContent = detail;
+    $("#generateVoice").disabled = active || !state.voiceboxStatus?.available || !(state.voiceboxStatus?.profiles?.length);
+    $("#generateVoice").setAttribute("aria-busy", String(active));
+    $("#generateVoice span").textContent = active ? "正在生成" : "生成语音";
+    $("#cancelVoice").hidden = !active;
+    const completed = status === "completed" && Boolean(generation?.audioUrl);
+    const player = $("#voicePlayer");
+    player.hidden = !completed;
+    $("#voiceOutputActions").hidden = !completed;
+    if (completed && player.dataset.source !== generation.audioUrl) {
+      player.dataset.source = generation.audioUrl;
+      player.src = generation.audioUrl;
+      player.load();
+    }
+    if (!completed && player.dataset.source) {
+      player.pause();
+      player.removeAttribute("src");
+      player.removeAttribute("data-source");
+      player.load();
+    }
+    $("#voiceOutputDuration").textContent = generation?.duration ? formatDuration(generation.duration) : "--:--";
+  }
+
+  function renderVoicebox() {
+    const status = state.voiceboxStatus || { available: false, profiles: [] };
+    const profiles = Array.isArray(status.profiles) ? status.profiles : [];
+    const connection = $("#voiceConnection");
+    connection.className = `voice-connection ${status.available ? "online" : "offline"}`;
+    connection.replaceChildren(
+      element("span", `status-dot${status.available ? "" : " error"}`),
+      element("span", "", status.available ? "已连接" : "未连接"),
+    );
+    $("#voiceOffline").hidden = status.available;
+    $("#voiceOfflineMessage").textContent = status.message || "ClipPort 将通过本机接口连接，不上传声音或文案。";
+    $("#voiceStudio").hidden = !status.available || !profiles.length;
+    $("#voiceEmptyProfiles").hidden = !status.available || Boolean(profiles.length);
+    const select = $("#voiceProfile");
+    const selectedId = select.value;
+    select.replaceChildren(...profiles.map((profile) => {
+      const option = element("option", "", profile.name);
+      option.value = profile.id;
+      return option;
+    }));
+    if (profiles.some((profile) => profile.id === selectedId)) select.value = selectedId;
+    const profile = selectedVoiceProfile();
+    if (profile && !selectedId) $("#voiceLanguage").value = profile.language || "zh";
+    const runtime = status.gpuType || (status.backend ? status.backend.toUpperCase() : "CPU");
+    $("#voiceRuntime").textContent = `${status.version ? `Voicebox ${status.version} · ` : ""}${runtime}`;
+    renderVoiceProfile(false);
+    renderVoiceboxGeneration();
     refreshIcons();
   }
 
@@ -703,8 +848,28 @@
     if (!statusNode || !button) return;
 
     statusNode.textContent = status.message || "可手动检查更新";
+    const downloading = status.status === "downloading";
+    const percent = Math.max(0, Math.min(100, Number(status.progress) || 0));
+    const sizeText = status.totalBytes
+      ? `${formatBytes(status.downloadedBytes)} / ${formatBytes(status.totalBytes)}`
+      : status.downloadedBytes ? `已下载 ${formatBytes(status.downloadedBytes)}` : "正在准备下载";
+    const speedText = status.bytesPerSecond ? ` · ${formatBytes(status.bytesPerSecond)}/s` : "";
+    const progressMeta = `${Math.round(percent)}% · ${sizeText}${speedText}`;
+    const inlineProgress = $("#updateInlineProgress");
+    inlineProgress.hidden = !downloading;
+    $("#updateInlineBar").style.transform = `scaleX(${percent / 100})`;
+    $(".update-progress-track", inlineProgress).setAttribute("aria-valuenow", String(Math.round(percent)));
+    $("#updateInlineMeta").textContent = progressMeta;
+
+    const floatingProgress = $("#updateDownloadStatus");
+    floatingProgress.hidden = !downloading;
+    $("#updateDownloadTitle").textContent = status.latestVersion ? `正在下载 ClipPort ${status.latestVersion}` : "正在下载安装包";
+    $("#updateDownloadPercent").textContent = `${Math.round(percent)}%`;
+    $("#updateDownloadBar").style.transform = `scaleX(${percent / 100})`;
+    $("#updateDownloadTrack").setAttribute("aria-valuenow", String(Math.round(percent)));
+    $("#updateDownloadMeta").textContent = `${sizeText}${speedText}`;
     const buttonLabel = $("span", button);
-    const busy = status.status === "checking" || status.status === "downloading";
+    const busy = status.status === "checking" || downloading;
     button.disabled = busy || status.status === "disabled";
     button.toggleAttribute("aria-busy", busy);
     if (status.status === "checking") buttonLabel.textContent = "正在检查";
@@ -975,6 +1140,118 @@
     }
   }
 
+  async function refreshVoicebox(showResult = true) {
+    const button = $("#refreshVoicebox");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      state.voiceboxStatus = await call(api.voicebox.status());
+      renderVoicebox();
+      if (showResult) {
+        showToast(
+          state.voiceboxStatus.available ? "Voicebox 已连接" : "Voicebox 未连接",
+          state.voiceboxStatus.message,
+          state.voiceboxStatus.available ? "success" : "error",
+        );
+      }
+    } catch (error) {
+      showToast("Voicebox 连接失败", error.message, "error");
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
+
+  function updateVoiceboxGeneration(update) {
+    if (!update?.id) return;
+    if (state.voiceboxGeneration?.id && state.voiceboxGeneration.id !== update.id && VOICEBOX_ACTIVE_STATES.has(state.voiceboxGeneration.status)) return;
+    const previousStatus = state.voiceboxGeneration?.id === update.id ? state.voiceboxGeneration.status : "";
+    state.voiceboxGeneration = { ...(state.voiceboxGeneration?.id === update.id ? state.voiceboxGeneration : {}), ...update };
+    renderVoiceboxGeneration();
+    if (update.status === "completed" && previousStatus !== "completed") showToast("语音生成完成", "现在可以试听或保存 WAV 音频");
+    if (update.status === "failed" && previousStatus !== "failed") showToast("语音生成失败", update.error || "请检查 Voicebox 后重试", "error");
+  }
+
+  async function generateVoice(event) {
+    event?.preventDefault();
+    const profile = selectedVoiceProfile();
+    const text = $("#voiceText").value.trim();
+    const consent = $("#voiceConsent").checked;
+    const errorNode = $("#voiceError");
+    errorNode.hidden = true;
+    $("#voiceText").removeAttribute("aria-invalid");
+    $("#voiceConsent").removeAttribute("aria-invalid");
+    if (!profile) {
+      errorNode.textContent = "请先在 Voicebox 中创建声音档案";
+      errorNode.hidden = false;
+      return;
+    }
+    if (!text) {
+      errorNode.textContent = "请输入要转换为语音的文案";
+      errorNode.hidden = false;
+      $("#voiceText").setAttribute("aria-invalid", "true");
+      $("#voiceText").focus();
+      return;
+    }
+    if (!consent) {
+      errorNode.textContent = "请确认你拥有该声音的使用授权";
+      errorNode.hidden = false;
+      $("#voiceConsent").setAttribute("aria-invalid", "true");
+      $("#voiceConsent").focus();
+      return;
+    }
+    $("#generateVoice").disabled = true;
+    try {
+      state.voiceboxGeneration = await call(api.voicebox.generate({
+        profileId: profile.id,
+        text,
+        language: $("#voiceLanguage").value,
+        instruct: $("#voiceInstruct").value.trim(),
+        personality: $("#voicePersonality").checked,
+        consent,
+      }));
+      renderVoiceboxGeneration();
+      showToast("语音任务已提交", "Voicebox 正在本机生成音频");
+    } catch (error) {
+      errorNode.textContent = error.message;
+      errorNode.hidden = false;
+      showToast("无法生成语音", error.message, "error");
+      if (error.code === "LICENSE_REQUIRED") focusLicenseSettings();
+    } finally {
+      if (!VOICEBOX_ACTIVE_STATES.has(state.voiceboxGeneration?.status)) $("#generateVoice").disabled = false;
+    }
+  }
+
+  async function cancelVoiceGeneration() {
+    const id = state.voiceboxGeneration?.id;
+    if (!id) return;
+    $("#cancelVoice").disabled = true;
+    try {
+      updateVoiceboxGeneration(await call(api.voicebox.cancel(id)));
+      showToast("语音生成已取消");
+    } catch (error) {
+      showToast("无法取消生成", error.message, "error");
+    } finally {
+      $("#cancelVoice").disabled = false;
+    }
+  }
+
+  async function saveVoiceAudio() {
+    const id = state.voiceboxGeneration?.id;
+    if (!id) return;
+    const button = $("#saveVoiceAudio");
+    button.disabled = true;
+    try {
+      const filePath = await call(api.voicebox.saveAudio(id));
+      if (filePath) showToast("语音已保存", filePath);
+    } catch (error) {
+      showToast("保存语音失败", error.message, "error");
+      if (error.code === "LICENSE_REQUIRED") focusLicenseSettings();
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   function bindEvents() {
     document.addEventListener("click", (event) => {
       const nav = event.target.closest("[data-nav]"); if (nav) showView(nav.dataset.nav);
@@ -1014,6 +1291,20 @@
     $("#historySearch").addEventListener("input", renderHistory);
     $("#closeToast").addEventListener("click", () => $("#toast").classList.remove("show"));
     $("#openFolder").addEventListener("click", () => call(api.files.openDownloadDirectory()).catch((error) => showToast("无法打开目录", error.message, "error")));
+    $("#voiceForm").addEventListener("submit", generateVoice);
+    $("#refreshVoicebox").addEventListener("click", () => refreshVoicebox(true));
+    $("#getVoicebox").addEventListener("click", () => call(api.voicebox.openDownload()).catch((error) => showToast("无法打开下载页面", error.message, "error")));
+    $("#voiceProfile").addEventListener("change", () => renderVoiceProfile(true));
+    $("#voiceText").addEventListener("input", (event) => {
+      $("#voiceCharacterCount").textContent = `${event.currentTarget.value.length} / 10000`;
+      event.currentTarget.removeAttribute("aria-invalid");
+      $("#voiceError").hidden = true;
+    });
+    $("#voiceConsent").addEventListener("change", (event) => { event.currentTarget.removeAttribute("aria-invalid"); $("#voiceError").hidden = true; });
+    $("#cancelVoice").addEventListener("click", cancelVoiceGeneration);
+    $("#saveVoiceAudio").addEventListener("click", saveVoiceAudio);
+    $("#regenerateVoice").addEventListener("click", () => $("#voiceForm").requestSubmit());
+    $("#voicePlayer").addEventListener("error", () => showToast("无法播放语音", "请确认 Voicebox 仍在运行", "error"));
     $("#checkTools").addEventListener("click", () => refreshTools(true));
     $("#checkUpdates").addEventListener("click", handleUpdateAction);
     $("#licenseForm").addEventListener("submit", activateLicense);
@@ -1042,7 +1333,7 @@
     try {
       const bootstrap = await call(api.app.bootstrap());
       Object.assign(state, bootstrap);
-      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); selectPreset("recommended");
+      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); renderVoicebox(); selectPreset("recommended");
       showView(location.hash.slice(1) || "download");
       api.events.onTaskChanged(upsertTask);
       api.events.onHistoryChanged(upsertHistory);
@@ -1059,6 +1350,7 @@
         state.licenseStatus = status;
         renderLicenseStatus();
       });
+      api.events.onVoiceboxGenerationStatus?.(updateVoiceboxGeneration);
       window.__clipportState = state;
     } catch (error) {
       showToast("ClipPort 启动失败", error.message, "error");

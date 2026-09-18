@@ -2,6 +2,9 @@ const DEFAULT_STATE = Object.freeze({
   status: "idle",
   latestVersion: "",
   progress: null,
+  downloadedBytes: null,
+  totalBytes: null,
+  bytesPerSecond: null,
   message: "启动后自动检查更新",
 });
 
@@ -35,29 +38,35 @@ class UpdateManager {
 
   bindEvents() {
     this.updater.on("checking-for-update", () => {
-      this.setState({ status: "checking", progress: null, message: "正在连接更新服务" });
+      this.setState({ status: "checking", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "正在连接更新服务" });
     });
     this.updater.on("update-not-available", () => {
-      this.setState({ status: "current", latestVersion: "", progress: null, message: "已是最新版本" });
+      this.setState({ status: "current", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "已是最新版本" });
     });
     this.updater.on("update-available", (info = {}) => {
       const latestVersion = String(info.version || "");
-      this.setState({ status: "available", latestVersion, progress: null, message: latestVersion ? `发现新版本 ${latestVersion}` : "发现新版本" });
+      this.setState({ status: "available", latestVersion, progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: latestVersion ? `发现新版本 ${latestVersion}` : "发现新版本" });
       void this.promptAvailable(latestVersion);
     });
     this.updater.on("download-progress", (progress = {}) => {
       const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
-      this.setState({ status: "downloading", progress: percent, message: `正在下载更新 ${Math.round(percent)}%` });
+      const downloadedBytes = Math.max(0, Number(progress.transferred) || 0);
+      const totalBytes = Math.max(0, Number(progress.total) || 0);
+      const bytesPerSecond = Math.max(0, Number(progress.bytesPerSecond) || 0);
+      this.setState({ status: "downloading", progress: percent, downloadedBytes, totalBytes, bytesPerSecond, message: `正在下载更新 ${Math.round(percent)}%` });
     });
     this.updater.on("update-downloaded", (info = {}) => {
       const latestVersion = String(info.version || this.state.latestVersion || "");
-      this.setState({ status: "downloaded", latestVersion, progress: 100, message: "更新已下载，等待重启安装" });
+      this.setState({ status: "downloaded", latestVersion, progress: 100, downloadedBytes: this.state.totalBytes, bytesPerSecond: 0, message: "更新已下载，等待重启安装" });
       void this.promptDownloaded(latestVersion);
     });
     this.updater.on("error", () => {
       this.setState({
         status: "error",
         progress: null,
+        downloadedBytes: null,
+        totalBytes: null,
+        bytesPerSecond: null,
         message: "无法连接更新服务，请稍后重试",
       });
     });
@@ -90,10 +99,10 @@ class UpdateManager {
     if (!this.enabled || this.downloadPromise) return this.getStatus();
     if (this.checkPromise) return this.checkPromise;
 
-    this.setState({ status: "checking", progress: null, message: "正在检查新版本" });
+    this.setState({ status: "checking", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "正在检查新版本" });
     this.checkPromise = this.updater.checkForUpdates()
       .catch(() => {
-        this.setState({ status: "error", progress: null, message: "无法连接更新服务，请稍后重试" });
+        this.setState({ status: "error", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "无法连接更新服务，请稍后重试" });
       })
       .then(() => this.getStatus())
       .finally(() => { this.checkPromise = null; });
@@ -104,10 +113,10 @@ class UpdateManager {
     if (!this.enabled || this.state.status !== "available") return this.getStatus();
     if (this.downloadPromise) return this.downloadPromise;
 
-    this.setState({ status: "downloading", progress: 0, message: "正在准备下载更新" });
+    this.setState({ status: "downloading", progress: 0, downloadedBytes: 0, totalBytes: null, bytesPerSecond: null, message: "正在准备下载更新" });
     this.downloadPromise = this.updater.downloadUpdate()
       .catch(() => {
-        this.setState({ status: "error", progress: null, message: "更新下载失败，请稍后重试" });
+        this.setState({ status: "error", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "更新下载失败，请稍后重试" });
       })
       .then(() => this.getStatus())
       .finally(() => { this.downloadPromise = null; });

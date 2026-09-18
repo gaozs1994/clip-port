@@ -13,6 +13,7 @@ ClipPort 是一款基于 Electron、yt-dlp 和 FFmpeg/ffprobe 的本地视频解
 - 安装包内置经过官方 SHA-512 校验的 yt-dlp，并支持后续手动更新
 - 内置 FFmpeg/ffprobe，自定义工具路径可覆盖
 - 抖音、哔哩哔哩、YouTube、小红书隔离登录会话与 Cookie 状态校验
+- Voicebox 本地语音生成：声音档案、23 种语言、生成进度、试听、取消与 WAV 保存
 - Windows 设备码与 Ed25519 离线授权
 
 首版暂不支持播放列表逐项选择和直播下载。
@@ -26,6 +27,12 @@ npm start
 ```
 
 Windows 安装包已内置 yt-dlp、FFmpeg 和 ffprobe，安装后无需另行下载依赖即可开始解析。设置页仍可手动更新 yt-dlp；应用只从 yt-dlp 官方 GitHub Release 获取文件，并在启用前校验官方 SHA-512 清单。
+
+### Voicebox 集成
+
+语音功能通过 Voicebox 官方本地 HTTP API 工作。请先安装并启动 [Voicebox](https://github.com/jamiepine/voicebox)，在 Voicebox 中完成模型下载和声音档案创建；ClipPort 会自动连接 `http://127.0.0.1:17493`。模型和生成任务仍由 Voicebox 管理，ClipPort 不打包 PyTorch 或语音模型，也不会把文案、声音或生成音频发送到远程服务。
+
+ClipPort 仅允许连接本机回环地址，并对声音档案、文本长度、语言和任务 ID 做边界校验。请只使用本人声音，或已取得明确授权的声音；不得用于冒充、欺诈或其他侵犯他人权益的用途。
 
 ## 验证与打包
 
@@ -56,7 +63,7 @@ npm run license:issue -- --device CPD1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX -
 npm run license:issue -- --device CPD1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX --holder 用户名 --expires 2027-12-31
 ```
 
-签发工具只读取本地私钥，不连接网络。授权码包含目标设备码并由 Ed25519 签名，客户端仅内置公钥用于验证。
+签发工具只读取本地私钥，不连接网络。授权码包含目标设备码并由 Ed25519 签名，客户端仅内置公钥用于验证。激活后，授权会同时保存在应用数据目录和当前 Windows 用户注册表中；应用更新导致其中一份丢失或损坏时会自动恢复，无需重新绑定。
 
 ## 自动发布
 

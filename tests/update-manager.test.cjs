@@ -77,9 +77,12 @@ test("downloads an accepted update and reports progress", async () => {
   await flush();
 
   assert.equal(harness.updater.downloadCalls, 1);
-  harness.updater.emit("download-progress", { percent: 42.4 });
+  harness.updater.emit("download-progress", { percent: 42.4, transferred: 44_459_622, total: 104_857_600, bytesPerSecond: 2_097_152 });
   assert.equal(harness.manager.getStatus().status, "downloading");
   assert.equal(harness.manager.getStatus().progress, 42.4);
+  assert.equal(harness.manager.getStatus().downloadedBytes, 44_459_622);
+  assert.equal(harness.manager.getStatus().totalBytes, 104_857_600);
+  assert.equal(harness.manager.getStatus().bytesPerSecond, 2_097_152);
 });
 
 test("finishes active work before restarting into the installer", async () => {
