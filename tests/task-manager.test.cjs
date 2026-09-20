@@ -107,3 +107,25 @@ test("keeps queued tasks idle while the device license is inactive", () => {
   assert.equal(manager.launching.size, 0);
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+test("download scheduling ignores queued voice tasks in the shared store", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-shared-tasks-"));
+  try {
+    const store = new AppStore({ userDataPath: directory, downloadsPath: directory });
+    store.upsertTask({
+      id: "a1111111-1111-4111-8111-111111111111",
+      kind: "voice",
+      state: "queued",
+      stage: "等待生成",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const toolchain = { calls: 0, requireReady() { this.calls += 1; return Promise.resolve({}); } };
+    const manager = new TaskManager({ store, toolchain, safeStorage: { isEncryptionAvailable: () => false } });
+    await manager.schedule();
+    assert.equal(toolchain.calls, 0);
+    assert.equal(store.getTask("a1111111-1111-4111-8111-111111111111").state, "queued");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

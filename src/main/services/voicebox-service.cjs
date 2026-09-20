@@ -387,7 +387,16 @@ class VoiceboxService {
       }),
     }, 20_000);
     const id = assertVoiceboxGenerationId(generation?.id);
-    const initial = { id, status: generation?.status || "generating", error: "", duration: null };
+    const initial = {
+      id,
+      status: generation?.status || "generating",
+      error: "",
+      duration: null,
+      profileId: profile.id,
+      profileName: profile.name,
+      engine: profile.engine,
+      language: payload.language,
+    };
     this.onGenerationStatus?.(initial);
     this.#monitor(id);
     return initial;

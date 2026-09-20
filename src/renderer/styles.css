@@ -27,14 +27,6 @@
   --grid-line: rgba(0, 127, 136, 0.045);
   --panel-glow: rgba(0, 127, 136, 0.1);
   --accent-glow: rgba(196, 18, 114, 0.14);
-  --terminal-bg: #071116;
-  --terminal-surface: #0b1a21;
-  --terminal-text: #d9f8f5;
-  --terminal-muted: #78969c;
-  --terminal-border: #23424b;
-  --terminal-info: #54f1fa;
-  --terminal-warn: #ffc45c;
-  --terminal-error: #ff7188;
   --sidebar-width: 214px;
   --queue-width: 326px;
   --titlebar-height: 48px;
@@ -539,6 +531,13 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .eyebrow {
@@ -2272,9 +2271,9 @@ select,
 .task-table-head,
 .task-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1.6fr) minmax(190px, 1fr) 100px 92px;
+  grid-template-columns: minmax(210px, 1.6fr) minmax(150px, 1fr) 84px 116px;
   align-items: center;
-  column-gap: 16px;
+  column-gap: 12px;
 }
 
 .task-table-head {
@@ -2302,6 +2301,12 @@ select,
 .file-type {
   width: 38px;
   height: 38px;
+}
+
+.file-type.voice {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 
 .task-name-cell > span:last-child,
@@ -2801,7 +2806,7 @@ select,
   }
 
   .task-row {
-    grid-template-columns: minmax(0, 1fr) 92px;
+    grid-template-columns: minmax(0, 1fr) 124px;
     row-gap: 10px;
   }
 
@@ -3476,209 +3481,125 @@ select,
   color: var(--danger);
 }
 
-.terminal-log-shell {
+.diagnostic-log-count {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.logs-view {
+  height: 100%;
+  padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.diagnostic-log-viewer {
+  flex: 1;
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--terminal-border);
+  min-height: 260px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  color: var(--terminal-text);
-  background: var(--terminal-bg);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--terminal-info) 52%, transparent), 0 14px 34px color-mix(in srgb, var(--bg) 72%, transparent);
-}
-
-.terminal-log-titlebar {
-  min-height: 42px;
-  padding: 0 13px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--terminal-border);
-  background: var(--terminal-surface);
-  font: 11px/1.4 "Cascadia Mono", Consolas, monospace;
-}
-
-.terminal-log-titlebar > span {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--terminal-info);
-}
-
-.terminal-log-titlebar svg { width: 15px; height: 15px; }
-
-.terminal-log-titlebar strong {
-  color: var(--terminal-muted);
-  font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.terminal-log-privacy {
-  min-height: 38px;
-  padding: 8px 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--terminal-muted);
-  border-bottom: 1px solid var(--terminal-border);
-  font: 10px/1.45 "Cascadia Mono", Consolas, monospace;
-}
-
-.terminal-log-privacy svg {
-  width: 14px;
-  height: 14px;
-  color: var(--success);
-}
-
-.diagnostic-log-head,
-.diagnostic-log-row {
-  display: grid;
-  grid-template-columns: 112px 64px 112px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-}
-
-.diagnostic-log-head {
-  min-height: 32px;
-  padding: 8px 12px;
-  color: var(--terminal-muted);
-  border-bottom: 1px solid var(--terminal-border);
-  background: var(--terminal-surface);
-  font: 9px/1.5 "Cascadia Mono", Consolas, monospace;
-  text-transform: uppercase;
+  background: color-mix(in srgb, #000 20%, var(--surface));
 }
 
 .diagnostic-log-list {
-  min-height: 260px;
-  max-height: calc(100vh - 262px);
-  overflow: auto;
-  background-image: linear-gradient(to bottom, color-mix(in srgb, var(--terminal-info) 2%, transparent) 1px, transparent 1px);
-  background-size: 100% 38px;
+  width: 100%;
+  min-width: 0;
 }
 
 .diagnostic-log-row {
+  width: 100%;
   min-width: 0;
-  min-height: 38px;
-  padding: 8px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
-  font: 10px/1.5 "Cascadia Mono", Consolas, monospace;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 4px;
+  font: 12px/20px "Cascadia Mono", Consolas, monospace;
 }
 
 .diagnostic-log-row:hover {
-  background: color-mix(in srgb, var(--terminal-info) 5%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
 .diagnostic-time {
-  color: var(--terminal-muted);
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
   font-variant-numeric: tabular-nums;
+  user-select: none;
   white-space: nowrap;
 }
-
-.diagnostic-level {
-  width: max-content;
-  color: var(--terminal-info);
-  font-weight: 700;
-}
-
-.diagnostic-level.error {
-  color: var(--terminal-error);
-}
-
-.diagnostic-level.warn {
-  color: var(--terminal-warn);
-}
-
-.diagnostic-source {
-  overflow: hidden;
-  color: var(--terminal-info);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diagnostic-source::before { content: "["; }
-.diagnostic-source::after { content: "]"; }
 
 .diagnostic-output {
+  flex: 1;
   min-width: 0;
+  color: var(--text-secondary);
 }
 
 .diagnostic-message {
-  color: var(--terminal-text);
+  color: inherit;
   font: inherit;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.diagnostic-message::before {
-  margin-right: 7px;
-  color: var(--terminal-muted);
-  content: ">";
+.diagnostic-log-row.warn .diagnostic-message,
+.diagnostic-log-row.error .diagnostic-message {
+  color: color-mix(in srgb, #fb923c 82%, var(--text-primary));
 }
 
+.diagnostic-level,
+.diagnostic-source {
+  margin-right: 8px;
+  color: inherit;
+}
+
+.diagnostic-level::before,
+.diagnostic-source::before { content: "["; }
+
+.diagnostic-level::after,
+.diagnostic-source::after { content: "]"; }
+
 .diagnostic-details {
-  margin-top: 4px;
-  color: var(--terminal-muted);
+  margin: 1px 0 3px;
+  color: var(--text-secondary);
 }
 
 .diagnostic-details summary {
   width: max-content;
-  min-height: 24px;
-  display: flex;
-  align-items: center;
-  color: var(--terminal-info);
+  min-height: 20px;
+  color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
   cursor: pointer;
-  font-weight: 700;
+  font: inherit;
 }
 
 .diagnostic-details pre {
-  margin: 4px 0 0;
-  padding: 10px;
+  margin: 3px 0 6px;
+  padding: 8px 10px;
   overflow: auto;
-  border-left: 2px solid var(--terminal-border);
-  color: var(--terminal-muted);
-  background: var(--terminal-surface);
-  font: 10px/1.55 Consolas, "Cascadia Mono", monospace;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, #000 14%, var(--surface));
+  font: 11px/1.55 "Cascadia Mono", Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .diagnostic-empty {
-  min-height: 260px;
+  min-height: 270px;
   display: grid;
   place-content: center;
-  justify-items: center;
-  gap: 5px;
-  color: var(--terminal-muted);
-  text-align: center;
-  font-family: "Cascadia Mono", Consolas, monospace;
+  justify-items: start;
+  gap: 2px;
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  font: 12px/20px "Cascadia Mono", Consolas, monospace;
 }
 
-.diagnostic-empty svg {
-  width: 24px;
-  height: 24px;
-}
-
-.diagnostic-empty strong {
-  color: var(--terminal-text);
-  font-size: 12px;
-}
-
-.diagnostic-empty span {
-  font-size: 10px;
-}
-
-.diagnostic-load-more {
-  min-height: 40px;
-  display: grid;
-  place-items: center;
-  border-top: 1px solid var(--terminal-border);
-  background: var(--terminal-surface);
-}
-
-.diagnostic-load-more .text-button {
-  color: var(--terminal-info);
-  font-family: "Cascadia Mono", Consolas, monospace;
+.diagnostic-empty small {
+  color: inherit;
+  font: inherit;
 }
 
 .platform-list {
@@ -4022,11 +3943,6 @@ select,
     justify-content: flex-start;
   }
 
-  .diagnostic-log-head,
-  .diagnostic-log-row {
-    grid-template-columns: 96px 58px 96px minmax(0, 1fr);
-    gap: 8px;
-  }
 }
 
 /* Cyberpunk visual system: restrained neon chrome for a work-focused desktop tool. */

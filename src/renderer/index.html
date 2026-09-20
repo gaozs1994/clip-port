@@ -176,10 +176,10 @@
           </section>
 
           <section class="view" id="tasksView" data-view="tasks" aria-labelledby="tasksTitle" hidden>
-            <div class="page-header"><div><p class="eyebrow">任务中心</p><h1 id="tasksTitle">下载任务</h1></div><button class="primary-button compact" type="button" data-nav="download"><i data-lucide="plus"></i><span>新建下载</span></button></div>
-            <div class="metric-strip" aria-label="任务摘要"><div><span>进行中</span><strong id="metricActive">0</strong></div><div><span>等待中</span><strong id="metricQueued">0</strong></div><div><span>本次完成</span><strong id="metricCompleted">0</strong></div><div><span>实时速度</span><strong id="metricSpeed">0 B/s</strong></div></div>
+            <div class="page-header"><div><p class="eyebrow">任务中心</p><h1 id="tasksTitle">全部任务</h1></div><div class="page-header-actions"><button class="secondary-button compact" type="button" data-nav="voice"><i data-lucide="audio-lines"></i><span>生成语音</span></button><button class="primary-button compact" type="button" data-nav="download"><i data-lucide="download"></i><span>新建下载</span></button></div></div>
+            <div class="metric-strip" aria-label="任务摘要"><div><span>进行中</span><strong id="metricActive">0</strong></div><div><span>等待中</span><strong id="metricQueued">0</strong></div><div><span>已完成</span><strong id="metricCompleted">0</strong></div><div><span>下载速度</span><strong id="metricSpeed">0 B/s</strong></div></div>
             <div class="toolbar-row"><div class="filter-tabs" role="tablist" aria-label="任务筛选"><button class="filter-tab active" type="button" role="tab" aria-selected="true" data-task-filter="all">全部 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="active">进行中 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="queued">等待 <span>0</span></button><button class="filter-tab" type="button" role="tab" aria-selected="false" data-task-filter="failed">失败 <span>0</span></button></div></div>
-            <div class="task-table" id="taskTable"><div class="task-table-head" aria-hidden="true"><span>名称</span><span>状态</span><span>大小</span><span>操作</span></div><div class="empty-state roomy" id="taskEmpty"><i data-lucide="inbox"></i><strong>还没有下载任务</strong><span>解析媒体链接后，任务会显示在这里</span></div></div>
+            <div class="task-table" id="taskTable"><div class="task-table-head" aria-hidden="true"><span>名称</span><span>状态</span><span>结果</span><span>操作</span></div><div class="empty-state roomy" id="taskEmpty"><i data-lucide="inbox"></i><strong>还没有任务</strong><span>下载媒体或生成语音后，任务会显示在这里</span></div></div>
           </section>
 
           <section class="view" id="historyView" data-view="history" aria-labelledby="historyTitle" hidden>
@@ -190,16 +190,12 @@
 
           <section class="view logs-view" id="logsView" data-view="logs" aria-labelledby="diagnosticTitle" hidden>
             <div class="page-header logs-page-header">
-              <div><p class="eyebrow">本机诊断</p><h1 id="diagnosticTitle">诊断日志</h1></div>
-              <div class="diagnostic-actions"><button class="secondary-button compact" id="refreshDiagnosticLogs" type="button"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button class="secondary-button compact" id="exportDiagnosticLogs" type="button"><i data-lucide="download"></i><span>导出</span></button><button class="secondary-button compact danger" id="clearDiagnosticLogs" type="button"><i data-lucide="trash-2"></i><span>清空</span></button></div>
+              <div><p class="eyebrow">本机诊断</p><h1 id="diagnosticTitle">诊断日志</h1><p class="diagnostic-log-count" id="diagnosticLogCount">0 条日志</p></div>
+              <div class="diagnostic-actions"><button class="secondary-button compact" id="scrollDiagnosticLogsBottom" type="button" hidden><i data-lucide="arrow-down-to-line"></i><span>回到底部</span></button><button class="secondary-button compact" id="refreshDiagnosticLogs" type="button"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button class="secondary-button compact" id="exportDiagnosticLogs" type="button"><i data-lucide="download"></i><span>导出</span></button><button class="secondary-button compact danger" id="clearDiagnosticLogs" type="button"><i data-lucide="trash-2"></i><span>清空</span></button></div>
             </div>
-            <div class="terminal-log-shell">
-              <div class="terminal-log-titlebar"><span><i data-lucide="terminal"></i>clipport://diagnostics</span><strong id="diagnosticLogCount">0 条记录</strong></div>
-              <div class="terminal-log-privacy"><i data-lucide="shield-check"></i><span>仅保存在本机；链接、Cookie、授权码、设备码和本机路径会在写入前自动隐藏。</span></div>
-              <div class="diagnostic-log-head" aria-hidden="true"><span>时间</span><span>级别</span><span>模块</span><span>消息</span></div>
-              <div class="diagnostic-log-list" id="diagnosticLogList" aria-live="polite"></div>
-              <div class="diagnostic-empty" id="diagnosticLogEmpty" hidden><i data-lucide="file-search"></i><strong>暂无诊断日志</strong><span>遇到异常后刷新即可查看最近记录</span></div>
-              <div class="diagnostic-load-more" id="diagnosticLoadMoreRow" hidden><button class="text-button" id="loadMoreDiagnosticLogs" type="button">加载更多</button></div>
+            <div class="diagnostic-log-viewer" id="diagnosticLogViewer">
+              <div class="diagnostic-log-list" id="diagnosticLogList" role="log" aria-live="polite"></div>
+              <div class="diagnostic-empty" id="diagnosticLogEmpty" hidden><span>暂无诊断日志</span><small>应用运行时的异常与状态会显示在这里</small></div>
             </div>
           </section>
 

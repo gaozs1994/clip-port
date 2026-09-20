@@ -130,6 +130,7 @@ class TaskManager {
 
     const task = {
       id: crypto.randomUUID(),
+      kind: "download",
       state: "queued",
       stage: "等待下载",
       progress: { percent: 0, downloadedBytes: 0, totalBytes: null, speed: null, eta: null },
@@ -168,7 +169,7 @@ class TaskManager {
       const limit = this.store.getSettings().concurrency;
       const available = Math.max(0, limit - this.running.size - this.launching.size);
       const queued = this.store.state.tasks
-        .filter((task) => task.state === "queued" && !this.launching.has(task.id))
+        .filter((task) => (!task.kind || task.kind === "download") && task.state === "queued" && !this.launching.has(task.id))
         .slice(0, available);
       for (const task of queued) {
         this.launching.add(task.id);
@@ -381,6 +382,7 @@ class TaskManager {
   async pause(id) {
     assertTaskId(id);
     const task = this.store.getTask(id);
+    if (task?.kind && task.kind !== "download") throw new AppError("TASK_ACTION_UNSUPPORTED", "该任务不支持暂停");
     if (!task || !ACTIVE_TASK_STATES.has(task.state)) throw new AppError("TASK_NOT_ACTIVE", "任务当前不能暂停");
     const context = this.running.get(id);
     if (!context) throw new AppError("TASK_NOT_ACTIVE", "任务进程不存在");
@@ -393,6 +395,7 @@ class TaskManager {
   resume(id) {
     assertTaskId(id);
     const task = this.store.getTask(id);
+    if (task?.kind && task.kind !== "download") throw new AppError("TASK_ACTION_UNSUPPORTED", "该任务不支持继续");
     if (!task || !new Set(["paused", "interrupted", "failed"]).has(task.state)) throw new AppError("TASK_NOT_RESUMABLE", "任务当前不能继续");
     if (!this.#decrypt(task)) throw new AppError("URL_UNAVAILABLE", "请重新解析链接后创建任务");
     this.#save(task, { state: "queued", stage: "等待继续", error: null });
@@ -403,6 +406,7 @@ class TaskManager {
   async cancel(id) {
     assertTaskId(id);
     const task = this.store.getTask(id);
+    if (task?.kind && task.kind !== "download") throw new AppError("TASK_ACTION_UNSUPPORTED", "请使用对应任务的取消操作");
     if (!task) throw new AppError("TASK_NOT_FOUND", "任务不存在");
     const context = this.running.get(id);
     if (context) {

@@ -27,6 +27,7 @@ const { WindowsLicenseStore } = require("./services/windows-license-store.cjs");
 const { DiagnosticLog } = require("./services/diagnostic-log.cjs");
 const { DEFAULT_ORIGIN, VoiceboxService } = require("./services/voicebox-service.cjs");
 const { VoiceboxRuntimeManager } = require("./services/voicebox-runtime.cjs");
+const { VoiceTaskManager } = require("./services/voice-task-manager.cjs");
 const { AppError, assertTaskId, sanitizeSettingsPatch } = require("./services/validators.cjs");
 
 protocol.registerSchemesAsPrivileged([
@@ -47,6 +48,7 @@ let updateManager = null;
 let licenseManager = null;
 let voiceboxService = null;
 let voiceboxRuntime = null;
+let voiceTaskManager = null;
 let diagnosticLog = null;
 let shutdownStarted = false;
 const smokeTest = process.env.CLIPPORT_SMOKE_TEST === "1";
@@ -233,8 +235,8 @@ function registerIpc() {
     licenseManager.requireActive();
     return taskManager.resume(id);
   });
-  handle("tasks:cancel", ({ id }) => taskManager.cancel(id));
-  handle("tasks:remove", ({ id }) => taskManager.remove(id));
+  handle("tasks:cancel", ({ id }) => store.getTask(id)?.kind === "voice" ? voiceTaskManager.cancel(id) : taskManager.cancel(id));
+  handle("tasks:remove", ({ id }) => store.getTask(id)?.kind === "voice" ? voiceTaskManager.remove(id) : taskManager.remove(id));
 
   handle("settings:update", async (payload) => {
     const settings = store.updateSettings(sanitizeSettingsPatch(payload));
@@ -390,11 +392,11 @@ function registerIpc() {
     await voiceboxService.deleteModel(name);
     return voiceboxService.getStatus();
   });
-  handle("voicebox:generate", (payload) => {
+  handle("voicebox:generate", async (payload) => {
     licenseManager.requireActive();
-    return voiceboxService.startGeneration(payload);
+    return (await voiceTaskManager.create(payload)).generation;
   });
-  handle("voicebox:cancel", ({ id }) => voiceboxService.cancelGeneration(id));
+  handle("voicebox:cancel", ({ id }) => voiceTaskManager.cancel(id).then(() => ({ id, status: "canceled", duration: null, error: "已取消生成" })));
   handle("voicebox:save-audio", async ({ id }) => {
     licenseManager.requireActive();
     const result = await dialog.showSaveDialog(mainWindow, {
@@ -537,6 +539,7 @@ async function initialize() {
     origin: voiceboxRuntimeStatus.origin || DEFAULT_ORIGIN,
     getRuntimeStatus: () => voiceboxRuntime.getStatus(),
     onGenerationStatus: (status) => {
+      voiceTaskManager?.update(status);
       send("voicebox:generation-status", status);
       if (status.status === "failed") diagnosticLog.error("voicebox", status.error || "语音生成失败", { generationId: status.id });
     },
@@ -549,6 +552,11 @@ async function initialize() {
         publishVoiceboxStatus().catch(() => {});
       }
     },
+  });
+  voiceTaskManager = new VoiceTaskManager({
+    store,
+    voiceboxService,
+    onTaskChanged: (task) => send("tasks:changed", task),
   });
   douyinResolver = new DouyinResolver();
   mediaService = new MediaService({ toolchain, cookieManager, douyinResolver });

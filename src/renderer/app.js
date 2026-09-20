@@ -40,6 +40,10 @@
     tada: "HumeAI TADA",
     kokoro: "Kokoro",
   };
+  const VOICE_LANGUAGE_LABELS = {
+    zh: "中文", en: "英语", ja: "日语", ko: "韩语", de: "德语", fr: "法语", ru: "俄语", pt: "葡萄牙语", es: "西班牙语", it: "意大利语",
+    he: "希伯来语", ar: "阿拉伯语", da: "丹麦语", el: "希腊语", fi: "芬兰语", hi: "印地语", ms: "马来语", nl: "荷兰语", no: "挪威语", pl: "波兰语", sv: "瑞典语", sw: "斯瓦希里语", tr: "土耳其语",
+  };
   const VOICEBOX_ENGINE_ORDER = ["qwen", "qwen_custom_voice", "luxtts", "chatterbox", "chatterbox_turbo", "tada", "kokoro"];
   const VOICEBOX_ENGINE_ICONS = {
     qwen: "audio-lines",
@@ -74,7 +78,7 @@
     app: "应用",
     renderer: "界面",
     media: "媒体解析",
-    tasks: "下载任务",
+    tasks: "任务中心",
     auth: "平台登录",
     toolchain: "工具链",
     updates: "应用更新",
@@ -103,7 +107,7 @@
     taskFilter: "all",
     parsing: false,
     diagnosticLogs: [],
-    logRenderLimit: 100,
+    logAutoScroll: true,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -193,7 +197,25 @@
     const emitAuth = (platform) => listeners.auth.forEach((callback) => callback(structuredClone(platform)));
     const emitUpdate = () => listeners.update.forEach((callback) => callback(structuredClone(demoUpdateStatus)));
     const emitLicense = () => listeners.license.forEach((callback) => callback(structuredClone(demoLicenseStatus)));
-    const emitVoicebox = (status) => listeners.voicebox.forEach((callback) => callback(structuredClone(status)));
+    const syncDemoVoiceTask = (status) => {
+      const task = demoTasks.find((item) => item.id === status.id && item.kind === "voice");
+      if (!task) return;
+      const mapped = {
+        queued: ["queued", "等待生成"], loading_model: ["preparing", "正在加载语音模型"], generating: ["processing", "正在生成语音"], completed: ["completed", "语音生成完成"], failed: ["failed", "语音生成失败"], canceled: ["canceled", "已取消"],
+      }[status.status] || ["processing", "正在处理语音"];
+      task.state = mapped[0];
+      task.stage = status.error || mapped[1];
+      task.progress = { percent: status.status === "completed" ? 100 : null };
+      task.voice = { ...task.voice, duration: status.duration ?? task.voice.duration, audioUrl: status.audioUrl || task.voice.audioUrl };
+      task.error = status.status === "failed" ? { code: "VOICE_GENERATION_FAILED", message: status.error || mapped[1] } : null;
+      task.updatedAt = new Date().toISOString();
+      task.completedAt = status.status === "completed" ? task.updatedAt : null;
+      emitTask(task);
+    };
+    const emitVoicebox = (status) => {
+      syncDemoVoiceTask(status);
+      listeners.voicebox.forEach((callback) => callback(structuredClone(status)));
+    };
     const emitVoiceboxStatus = () => listeners.voiceboxStatus.forEach((callback) => callback(structuredClone(demoVoiceboxStatus)));
     const emitVoiceboxModel = (status) => listeners.voiceboxModel.forEach((callback) => callback(structuredClone(status)));
     const downloadDemoUpdate = async () => {
@@ -243,7 +265,7 @@
       },
       tasks: {
         create: (payload) => {
-          const task = { id: crypto.randomUUID(), state: "downloading", stage: "正在下载", progress: { percent: 8, downloadedBytes: 96_000_000, totalBytes: 1_200_000_000, speed: 12_800_000, eta: 43 }, media: payload.media, options: payload.options, outputRoot: payload.outputRoot, finalOutputs: [], error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          const task = { id: crypto.randomUUID(), kind: "download", state: "downloading", stage: "正在下载", progress: { percent: 8, downloadedBytes: 96_000_000, totalBytes: 1_200_000_000, speed: 12_800_000, eta: 43 }, media: payload.media, options: payload.options, outputRoot: payload.outputRoot, finalOutputs: [], error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
           demoTasks.unshift(task); emitTask(task); progressDemo(task); return ok(task);
         },
         pause: (id) => { const task = demoTasks.find((item) => item.id === id); if (task) { task.state = "paused"; task.stage = "已暂停，可继续下载"; emitTask(task); } return ok(task); },
@@ -329,7 +351,12 @@
         unloadModel: (name) => { const model = demoVoiceboxStatus.models.find((item) => item.name === name); if (model) model.loaded = false; emitVoiceboxStatus(); return ok(structuredClone(demoVoiceboxStatus)); },
         deleteModel: (name) => { const model = demoVoiceboxStatus.models.find((item) => item.name === name); if (model) Object.assign(model, { downloaded: false, loaded: false, sizeMb: null }); emitVoiceboxStatus(); return ok(structuredClone(demoVoiceboxStatus)); },
         generate: (payload) => {
-          const generation = { id: crypto.randomUUID(), status: "generating", duration: null, error: "", profileId: payload.profileId };
+          const profile = demoVoiceboxStatus.profiles.find((item) => item.id === payload.profileId);
+          const generation = { id: crypto.randomUUID(), status: "generating", duration: null, error: "", profileId: payload.profileId, profileName: profile?.name || "声音档案", engine: profile?.engine || "", language: payload.language };
+          const createdAt = new Date().toISOString();
+          const task = { id: generation.id, kind: "voice", state: "processing", stage: "正在生成语音", title: `语音生成 · ${generation.profileName}`, progress: { percent: null }, voice: { profileId: generation.profileId, profileName: generation.profileName, engine: generation.engine, language: generation.language, textLength: payload.text.trim().length, duration: null, audioUrl: "" }, error: null, createdAt, updatedAt: createdAt, completedAt: null };
+          demoTasks.unshift(task);
+          emitTask(task);
           clearTimeout(voiceTimer);
           clearTimeout(voiceCompletionTimer);
           voiceTimer = setTimeout(() => emitVoicebox({ ...generation, status: "loading_model" }), 350);
@@ -407,8 +434,6 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "未知时间";
     return new Intl.DateTimeFormat("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -777,6 +802,20 @@
     return task.state === state.taskFilter;
   }
 
+  function isVoiceTask(task) {
+    return task.kind === "voice";
+  }
+
+  function taskTitle(task) {
+    return isVoiceTask(task) ? task.title || "语音生成" : task.media?.title || "未命名任务";
+  }
+
+  function taskSubtitle(task) {
+    if (!isVoiceTask(task)) return `${PRESETS[task.options?.preset]?.label || "媒体下载"} · ${formatDuration(task.media?.duration)}`;
+    const voice = task.voice || {};
+    return ["语音生成", voice.profileName, VOICE_LANGUAGE_LABELS[voice.language] || voice.language].filter(Boolean).join(" · ");
+  }
+
   function stateLabel(task) {
     const labels = { queued: "等待中", preparing: "准备中", downloading: "下载中", processing: "处理中", verifying: "校验中", pausing: "正在暂停", paused: "已暂停", canceling: "正在取消", canceled: "已取消", completed: "已完成", partial: "部分完成", failed: "失败", interrupted: "已中断" };
     return labels[task.state] || task.stage || task.state;
@@ -796,22 +835,25 @@
   function createTaskRow(task) {
     const row = element("article", "task-row");
     row.dataset.state = task.state;
+    row.dataset.kind = task.kind || "download";
     row.dataset.taskId = task.id;
+    const voiceTask = isVoiceTask(task);
     const nameCell = element("div", "task-name-cell");
-    const typeIcon = element("span", `file-type ${["audio", "mp3"].includes(task.options?.preset) ? "blue" : ""}`);
-    typeIcon.append(icon(["audio", "mp3"].includes(task.options?.preset) ? "music-2" : task.options?.preset === "subtitles" ? "captions" : "file-video-2"));
+    const typeIcon = element("span", `file-type ${voiceTask ? "voice" : ["audio", "mp3"].includes(task.options?.preset) ? "blue" : ""}`);
+    typeIcon.append(icon(voiceTask ? "audio-lines" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : task.options?.preset === "subtitles" ? "captions" : "file-video-2"));
     const title = element("span");
-    append(title, element("strong", "", task.media?.title || "未命名任务"), element("small", "", `${PRESETS[task.options?.preset]?.label || "媒体"} · ${formatDuration(task.media?.duration)}`));
+    append(title, element("strong", "", taskTitle(task)), element("small", "", taskSubtitle(task)));
     append(nameCell, typeIcon, title);
 
     const statusCell = element("div", "task-status-cell");
     const statusLine = element("div");
     const percent = Number(task.progress?.percent) || 0;
-    const speedText = task.state === "downloading"
+    const speedText = !voiceTask && task.state === "downloading"
       ? task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"
       : task.stage || "";
-    append(statusLine, element("span", task.state === "failed" ? "status-error" : "", `${stateLabel(task)}${task.state === "downloading" ? ` · ${percent.toFixed(0)}%` : ""}`), element("span", "", speedText));
-    const progress = element("div", `progress-track${task.state === "processing" || task.state === "verifying" ? " processing" : ""}`);
+    append(statusLine, element("span", task.state === "failed" ? "status-error" : "", `${stateLabel(task)}${!voiceTask && task.state === "downloading" ? ` · ${percent.toFixed(0)}%` : ""}`), element("span", "", speedText));
+    const indeterminate = task.state === "processing" || task.state === "verifying" || (voiceTask && ACTIVE_STATES.has(task.state) && task.progress?.percent == null);
+    const progress = element("div", `progress-track${indeterminate ? " processing" : ""}`);
     const value = element("span");
     if (!progress.classList.contains("processing")) value.style.width = `${Math.max(0, Math.min(100, percent))}%`;
     progress.append(value);
@@ -819,39 +861,55 @@
     if (task.error?.message) statusCell.append(element("small", "", task.error.message));
 
     const sizeCell = element("div", "task-size-cell");
-    const downloadedBytes = Number(task.progress?.downloadedBytes) || 0;
-    const totalBytes = Number(task.progress?.totalBytes) || Number(task.media?.estimatedBytes) || 0;
-    const completed = task.state === "completed" && task.finalOutputs?.length;
-    const sizePrimary = completed && totalBytes
-      ? formatBytes(totalBytes)
-      : downloadedBytes
-        ? formatBytes(downloadedBytes)
-        : totalBytes
-          ? `约 ${formatBytes(totalBytes)}`
-          : "--";
-    const sizeSecondary = completed && totalBytes
-      ? "最终大小"
-      : downloadedBytes && totalBytes
-        ? `共 ${formatBytes(totalBytes)}`
+    let sizePrimary;
+    let sizeSecondary;
+    if (voiceTask) {
+      sizePrimary = task.state === "completed" && task.voice?.duration ? formatDuration(task.voice.duration) : `${task.voice?.textLength || 0} 字`;
+      sizeSecondary = task.state === "completed" && task.voice?.duration ? "生成时长" : "输入文本";
+    } else {
+      const downloadedBytes = Number(task.progress?.downloadedBytes) || 0;
+      const totalBytes = Number(task.progress?.totalBytes) || Number(task.media?.estimatedBytes) || 0;
+      const completed = task.state === "completed" && task.finalOutputs?.length;
+      sizePrimary = completed && totalBytes
+        ? formatBytes(totalBytes)
         : downloadedBytes
-          ? "已下载 · 总大小计算中"
+          ? formatBytes(downloadedBytes)
           : totalBytes
-            ? "预计大小"
-            : "大小计算中";
+            ? `约 ${formatBytes(totalBytes)}`
+            : "--";
+      sizeSecondary = completed && totalBytes
+        ? "最终大小"
+        : downloadedBytes && totalBytes
+          ? `共 ${formatBytes(totalBytes)}`
+          : downloadedBytes
+            ? "已下载 · 总大小计算中"
+            : totalBytes
+              ? "预计大小"
+              : "大小计算中";
+    }
     append(sizeCell, element("strong", "", sizePrimary), element("small", "", sizeSecondary));
     const actions = element("div", "task-actions-cell");
-    if (ACTIVE_STATES.has(task.state)) actions.append(createIconButton("pause", "暂停任务", "pause", task.id));
-    if (["paused", "failed", "interrupted"].includes(task.state)) actions.append(createIconButton("play", "继续任务", "resume", task.id));
-    if (task.state === "completed" && task.finalOutputs?.length) actions.append(createIconButton("play", "打开文件", "open", task.id));
-    if (["queued", "paused", ...ACTIVE_STATES].includes(task.state)) actions.append(createIconButton("x", "取消任务", "cancel", task.id, "danger-hover"));
-    else actions.append(createIconButton("trash-2", "移除任务", "remove", task.id, "danger-hover"));
+    if (voiceTask) {
+      if (task.state === "completed" && task.voice?.audioUrl) {
+        actions.append(createIconButton("play", "试听语音", "voice-open", task.id));
+        actions.append(createIconButton("download", "保存语音", "voice-save", task.id));
+      }
+      if (["queued", ...ACTIVE_STATES].includes(task.state)) actions.append(createIconButton("x", "取消语音任务", "cancel", task.id, "danger-hover"));
+      else actions.append(createIconButton("trash-2", "移除任务", "remove", task.id, "danger-hover"));
+    } else {
+      if (ACTIVE_STATES.has(task.state)) actions.append(createIconButton("pause", "暂停任务", "pause", task.id));
+      if (["paused", "failed", "interrupted"].includes(task.state)) actions.append(createIconButton("play", "继续任务", "resume", task.id));
+      if (task.state === "completed" && task.finalOutputs?.length) actions.append(createIconButton("play", "打开文件", "open", task.id));
+      if (["queued", "paused", ...ACTIVE_STATES].includes(task.state)) actions.append(createIconButton("x", "取消任务", "cancel", task.id, "danger-hover"));
+      else actions.append(createIconButton("trash-2", "移除任务", "remove", task.id, "danger-hover"));
+    }
     append(row, nameCell, statusCell, sizeCell, actions);
     return row;
   }
 
   function renderTasks() {
     const counts = taskCounts();
-    const liveSpeed = state.tasks.reduce((sum, task) => sum + (task.state === "downloading" ? Number(task.progress?.speed) || 0 : 0), 0);
+    const liveSpeed = state.tasks.reduce((sum, task) => sum + (!isVoiceTask(task) && task.state === "downloading" ? Number(task.progress?.speed) || 0 : 0), 0);
     $("#metricActive").textContent = counts.active;
     $("#metricQueued").textContent = counts.queued;
     $("#metricCompleted").textContent = counts.completed;
@@ -878,25 +936,35 @@
   function createQueueTask(task) {
     const row = element("article", "queue-task");
     row.dataset.state = task.state;
+    row.dataset.kind = task.kind || "download";
+    const voiceTask = isVoiceTask(task);
     const head = element("div", "queue-task-head");
-    const thumb = element("span", `mini-thumb graphic-thumb ${["audio", "mp3"].includes(task.options?.preset) ? "navy" : ""}`);
-    thumb.append(icon(["audio", "mp3"].includes(task.options?.preset) ? "music-2" : "download"));
+    const thumb = element("span", `mini-thumb graphic-thumb ${voiceTask || ["audio", "mp3"].includes(task.options?.preset) ? "navy" : ""}`);
+    thumb.append(icon(voiceTask ? "audio-lines" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : "download"));
     const copy = element("span", "queue-task-copy");
-    const queueSpeed = task.state === "downloading" ? ` · ${task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"}` : "";
-    append(copy, element("strong", "", task.media?.title || "未命名任务"), element("small", "", `${stateLabel(task)}${queueSpeed}`));
-    const action = ACTIVE_STATES.has(task.state) ? createIconButton("pause", "暂停任务", "pause", task.id) : task.state === "paused" ? createIconButton("play", "继续任务", "resume", task.id) : createIconButton("x", "取消任务", "cancel", task.id);
+    const queueSpeed = !voiceTask && task.state === "downloading" ? ` · ${task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"}` : "";
+    append(copy, element("strong", "", taskTitle(task)), element("small", "", `${stateLabel(task)}${queueSpeed}`));
+    const action = voiceTask
+      ? createIconButton("x", "取消语音任务", "cancel", task.id)
+      : ACTIVE_STATES.has(task.state)
+        ? createIconButton("pause", "暂停任务", "pause", task.id)
+        : task.state === "paused"
+          ? createIconButton("play", "继续任务", "resume", task.id)
+          : createIconButton("x", "取消任务", "cancel", task.id);
     action.classList.remove("bordered");
     append(head, thumb, copy, action);
     const meta = element("div", "progress-meta");
     const downloadedBytes = Number(task.progress?.downloadedBytes) || 0;
     const totalBytes = Number(task.progress?.totalBytes) || Number(task.media?.estimatedBytes) || 0;
-    const sizeText = totalBytes
-      ? `${formatBytes(downloadedBytes)} / ${totalBytes === task.media?.estimatedBytes && !task.progress?.totalBytes ? "约 " : ""}${formatBytes(totalBytes)}`
-      : downloadedBytes
-        ? `已下载 ${formatBytes(downloadedBytes)}`
-        : task.stage || "等待中";
-    append(meta, element("span", "", `${Math.round(task.progress?.percent || 0)}%`), element("span", "", sizeText));
-    const track = element("div", `progress-track${task.state === "processing" || task.state === "verifying" ? " processing" : ""}`);
+    const sizeText = voiceTask
+      ? `${task.voice?.textLength || 0} 字 · ${VOICE_LANGUAGE_LABELS[task.voice?.language] || task.voice?.language || "自动"}`
+      : totalBytes
+        ? `${formatBytes(downloadedBytes)} / ${totalBytes === task.media?.estimatedBytes && !task.progress?.totalBytes ? "约 " : ""}${formatBytes(totalBytes)}`
+        : downloadedBytes
+          ? `已下载 ${formatBytes(downloadedBytes)}`
+          : task.stage || "等待中";
+    append(meta, element("span", "", voiceTask ? "语音" : `${Math.round(task.progress?.percent || 0)}%`), element("span", "", sizeText));
+    const track = element("div", `progress-track${task.state === "processing" || task.state === "verifying" || (voiceTask && ACTIVE_STATES.has(task.state)) ? " processing" : ""}`);
     const value = element("span"); value.style.width = `${Math.max(0, Math.min(100, task.progress?.percent || 0))}%`; track.append(value);
     append(row, head, meta, track);
     return row;
@@ -1024,21 +1092,23 @@
     const list = $("#diagnosticLogList");
     if (!list) return;
     const logs = Array.isArray(state.diagnosticLogs) ? state.diagnosticLogs : [];
-    const visible = logs.slice(0, state.logRenderLimit);
-    $("#diagnosticLogCount").textContent = visible.length < logs.length
-      ? `${visible.length} / ${logs.length} 条已显示`
-      : `${logs.length} 条记录`;
+    $("#diagnosticLogCount").textContent = `${logs.length} 条日志`;
     list.replaceChildren();
-    for (const entry of visible) {
+    for (const entry of logs.slice().reverse()) {
       const row = element("article", `diagnostic-log-row ${entry.level || "info"}`);
       const levelName = LOG_LEVEL_TEXT[entry.level] || "INFO";
-      const levelBadge = element("span", `diagnostic-level ${entry.level || "info"}`, levelName);
       const time = element("time", "diagnostic-time", formatLogDate(entry.timestamp));
       time.dateTime = entry.timestamp || "";
       time.title = entry.timestamp ? formatLicenseDate(entry.timestamp, true) : "未知时间";
-      const source = element("span", "diagnostic-source", LOG_SOURCE_LABELS[entry.source] || entry.source || "应用");
       const output = element("div", "diagnostic-output");
-      append(output, element("p", "diagnostic-message", entry.message || "未提供日志信息"));
+      const line = element("p", "diagnostic-message");
+      append(
+        line,
+        element("span", "diagnostic-level", levelName),
+        element("span", "diagnostic-source", LOG_SOURCE_LABELS[entry.source] || entry.source || "应用"),
+        document.createTextNode(entry.message || "未提供日志信息"),
+      );
+      output.append(line);
       const hasDetails = entry.details && (typeof entry.details !== "object" || Object.keys(entry.details).length > 0);
       if (hasDetails) {
         const disclosure = element("details", "diagnostic-details");
@@ -1047,14 +1117,29 @@
         append(disclosure, summary, detailOutput);
         output.append(disclosure);
       }
-      append(row, time, levelBadge, source, output);
+      append(row, time, output);
       list.append(row);
     }
     $("#diagnosticLogEmpty").hidden = logs.length > 0;
     list.hidden = logs.length === 0;
-    $("#diagnosticLoadMoreRow").hidden = visible.length >= logs.length;
-    $("#loadMoreDiagnosticLogs").textContent = visible.length < logs.length ? `加载更多（剩余 ${logs.length - visible.length} 条）` : "加载更多";
+    const viewer = $("#diagnosticLogViewer");
+    if (state.logAutoScroll && viewer) requestAnimationFrame(() => { viewer.scrollTop = viewer.scrollHeight; });
+    $("#scrollDiagnosticLogsBottom").hidden = state.logAutoScroll || logs.length === 0;
     refreshIcons();
+  }
+
+  function scrollDiagnosticLogsBottom() {
+    const viewer = $("#diagnosticLogViewer");
+    if (!viewer) return;
+    state.logAutoScroll = true;
+    viewer.scrollTo({ top: viewer.scrollHeight, behavior: "smooth" });
+    $("#scrollDiagnosticLogsBottom").hidden = true;
+  }
+
+  function handleDiagnosticLogScroll(event) {
+    const viewer = event.currentTarget;
+    state.logAutoScroll = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 40;
+    $("#scrollDiagnosticLogsBottom").hidden = state.logAutoScroll || state.diagnosticLogs.length === 0;
   }
 
   function upsertDiagnosticLog(entry) {
@@ -1069,7 +1154,6 @@
     if (button) button.disabled = true;
     try {
       state.diagnosticLogs = await call(api.logs.list({ limit: 500 }));
-      state.logRenderLimit = 100;
       renderDiagnosticLogs();
       if (showResult) showToast("诊断日志已刷新", `已读取 ${state.diagnosticLogs.length} 条最近记录`);
     } catch (error) {
@@ -1345,8 +1429,19 @@
 
   async function handleTaskAction(button) {
     const { taskAction: action, taskId: id } = button.dataset;
+    const task = state.tasks.find((item) => item.id === id);
     try {
       if (action === "open") await call(api.files.open("task", id));
+      else if (action === "voice-open" && task?.voice?.audioUrl) {
+        state.voiceboxGeneration = { id, status: "completed", duration: task.voice.duration, error: "", audioUrl: task.voice.audioUrl };
+        renderVoiceboxGeneration();
+        showView("voice");
+        $("#voicePlayer").play().catch(() => {});
+      }
+      else if (action === "voice-save") {
+        const filePath = await call(api.voicebox.saveAudio(id));
+        if (filePath) showToast("语音已保存", filePath);
+      }
       else if (action === "pause") upsertTask(await call(api.tasks.pause(id)));
       else if (action === "resume") upsertTask(await call(api.tasks.resume(id)));
       else if (action === "cancel") upsertTask(await call(api.tasks.cancel(id)));
@@ -1862,7 +1957,8 @@
     $("#refreshDiagnosticLogs").addEventListener("click", () => refreshDiagnosticLogs(true));
     $("#exportDiagnosticLogs").addEventListener("click", exportDiagnosticLogs);
     $("#clearDiagnosticLogs").addEventListener("click", clearDiagnosticLogs);
-    $("#loadMoreDiagnosticLogs").addEventListener("click", () => { state.logRenderLimit += 100; renderDiagnosticLogs(); });
+    $("#scrollDiagnosticLogsBottom").addEventListener("click", scrollDiagnosticLogsBottom);
+    $("#diagnosticLogViewer").addEventListener("scroll", handleDiagnosticLogScroll);
     $("#licenseForm").addEventListener("submit", activateLicense);
     $("#licenseCode").addEventListener("input", (event) => {
       event.currentTarget.removeAttribute("aria-invalid");
