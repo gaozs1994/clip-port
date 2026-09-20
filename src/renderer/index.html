@@ -92,9 +92,15 @@
 
             <div class="voice-offline" id="voiceOffline" role="status">
               <span class="voice-offline-icon"><i data-lucide="audio-waveform"></i></span>
-              <div><strong>启动 Voicebox 后即可使用</strong><span id="voiceOfflineMessage">ClipPort 将通过本机接口连接，不上传声音或文案。</span></div>
-              <button class="secondary-button compact" id="getVoicebox" type="button"><i data-lucide="external-link"></i><span>获取 Voicebox</span></button>
+              <div><strong id="voiceOfflineTitle">正在启动语音服务</strong><span id="voiceOfflineMessage">ClipPort 正在准备内置 Voicebox 运行时。</span></div>
+              <button class="secondary-button compact" id="getVoicebox" type="button"><i data-lucide="rotate-cw"></i><span>重新启动</span></button>
             </div>
+
+            <details class="voice-resources" id="voiceResources" hidden>
+              <summary><span><i data-lucide="boxes"></i><span><strong>语音模型库</strong><small id="voiceModelSummary">正在读取模型状态</small></span></span><i data-lucide="chevron-down"></i></summary>
+              <div class="voice-model-list" id="voiceModelList" aria-live="polite"></div>
+              <p class="voice-model-note"><i data-lucide="hard-drive-download"></i>模型按需下载到本机 Voicebox 数据目录；预计体积仅供参考，许可由对应模型提供者决定。</p>
+            </details>
 
             <div class="voice-studio-layout" id="voiceStudio" hidden>
               <form class="voice-composer" id="voiceForm">
@@ -104,7 +110,7 @@
                 </div>
 
                 <div class="voice-profile-controls">
-                  <label class="control-field" for="voiceProfile"><span>声音档案</span><select id="voiceProfile" aria-describedby="voiceProfileMeta"></select></label>
+                  <div class="voice-profile-picker"><label class="control-field" for="voiceProfile"><span>声音档案</span><select id="voiceProfile" aria-describedby="voiceProfileMeta"></select></label><div class="voice-profile-actions"><button class="icon-button bordered" id="createVoiceProfile" type="button" aria-label="新建声音档案" title="新建声音档案"><i data-lucide="plus"></i></button><button class="icon-button bordered danger" id="deleteVoiceProfile" type="button" aria-label="删除当前声音档案" title="删除当前声音档案"><i data-lucide="trash-2"></i></button></div></div>
                   <label class="control-field" for="voiceLanguage"><span>语言</span><select id="voiceLanguage">
                     <option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option><option value="pt">Português</option><option value="ru">Русский</option><option value="ar">العربية</option><option value="hi">हिन्दी</option><option value="tr">Türkçe</option><option value="pl">Polski</option><option value="nl">Nederlands</option><option value="sv">Svenska</option><option value="da">Dansk</option><option value="fi">Suomi</option><option value="el">Ελληνικά</option><option value="he">עברית</option><option value="ms">Bahasa Melayu</option><option value="no">Norsk</option><option value="sw">Kiswahili</option>
                   </select></label>
@@ -161,7 +167,7 @@
             </div>
 
             <div class="voice-empty-profiles" id="voiceEmptyProfiles" hidden>
-              <i data-lucide="contact-round"></i><strong>Voicebox 中还没有声音档案</strong><span>请先在 Voicebox 创建预设声音或添加已获授权的声音样本，然后刷新连接。</span>
+              <i data-lucide="contact-round"></i><strong>还没有声音档案</strong><span>创建预设音色，或添加一段已获授权的声音样本。</span><button class="primary-button compact" id="createFirstVoiceProfile" type="button"><i data-lucide="plus"></i><span>新建声音档案</span></button>
             </div>
           </section>
 
@@ -181,7 +187,7 @@
           <section class="view" id="settingsView" data-view="settings" aria-labelledby="settingsTitle" hidden>
             <div class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="settingsTitle">设置</h1></div><span class="autosave-label"><i data-lucide="check"></i>自动保存</span></div>
             <div class="settings-layout">
-              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="licenseSettings">设备授权</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="toolSettings">工具链</button><button type="button" data-settings-anchor="aboutSettings">关于</button></nav>
+              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="licenseSettings">设备授权</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="toolSettings">工具链</button><button type="button" data-settings-anchor="diagnosticSettings">诊断日志</button><button type="button" data-settings-anchor="aboutSettings">关于</button></nav>
               <div class="settings-content">
                 <section class="settings-group" id="downloadSettings" aria-labelledby="generalSettings"><div class="settings-heading"><h2 id="generalSettings">下载偏好</h2><p>应用于之后创建的任务</p></div><div class="setting-row"><div><strong>默认保存位置</strong><span id="settingsDirectory">--</span></div><button class="secondary-button compact" type="button" id="chooseDirectory">更改</button></div><label class="setting-row"><div><strong>同时下载任务</strong><span>并发数越高，对网络与磁盘占用越大</span></div><select id="concurrencySelect"><option value="1">1 个任务</option><option value="2">2 个任务</option><option value="3">3 个任务</option></select></label></section>
                 <section class="settings-group" id="authSettings" aria-labelledby="authTitle"><div class="settings-heading"><div><h2 id="authTitle">平台登录</h2><p>各平台使用独立会话</p></div><span class="auth-summary" id="authSummary">0 个平台已连接</span></div><div class="auth-privacy"><i data-lucide="shield-check"></i><span>登录页面与主应用隔离；ClipPort 不读取密码，Cookie 仅保存在本机。</span></div><div class="platform-list" id="authPlatformList" aria-live="polite"></div></section>
@@ -206,6 +212,16 @@
                   <div class="tool-row"><span class="tool-icon orange"><i data-lucide="audio-waveform"></i></span><div><strong>FFmpeg</strong><span id="ffmpegStatus">检查中</span></div><button class="text-button" type="button" data-select-tool="ffmpeg">选择文件</button></div>
                   <div class="tool-row"><span class="tool-icon blue"><i data-lucide="scan-line"></i></span><div><strong>ffprobe</strong><span id="ffprobeStatus">检查中</span></div><button class="text-button" type="button" data-select-tool="ffprobe">选择文件</button></div>
                 </section>
+                <section class="settings-group diagnostic-settings" id="diagnosticSettings" aria-labelledby="diagnosticTitle">
+                  <div class="settings-heading diagnostic-heading"><div><h2 id="diagnosticTitle">诊断日志</h2><p id="diagnosticLogCount">0 条最近记录</p></div><div class="diagnostic-actions"><button class="secondary-button compact" id="refreshDiagnosticLogs" type="button"><i data-lucide="refresh-cw"></i><span>刷新</span></button><button class="secondary-button compact" id="exportDiagnosticLogs" type="button"><i data-lucide="download"></i><span>导出</span></button><button class="text-button danger" id="clearDiagnosticLogs" type="button"><i data-lucide="trash-2"></i><span>清空</span></button></div></div>
+                  <div class="auth-privacy diagnostic-privacy"><i data-lucide="shield-check"></i><span>日志仅保存在本机并限制容量；链接、Cookie、授权码、设备码和本机路径会在写入前自动隐藏。</span></div>
+                  <div class="diagnostic-toolbar" aria-label="日志筛选">
+                    <label><span>级别</span><select id="logLevelFilter"><option value="all">全部级别</option><option value="error">错误</option><option value="warn">警告</option><option value="info">信息</option></select></label>
+                    <label><span>模块</span><select id="logSourceFilter"><option value="all">全部模块</option><option value="app">应用</option><option value="renderer">界面</option><option value="media">媒体解析</option><option value="tasks">下载任务</option><option value="auth">平台登录</option><option value="toolchain">工具链</option><option value="updates">应用更新</option><option value="license">设备授权</option><option value="voicebox">Voicebox</option><option value="settings">设置</option><option value="files">文件</option><option value="security">安全</option></select></label>
+                  </div>
+                  <div class="diagnostic-log-list" id="diagnosticLogList" aria-live="polite"></div>
+                  <div class="diagnostic-empty" id="diagnosticLogEmpty" hidden><i data-lucide="file-search"></i><strong>没有匹配的日志</strong><span>遇到异常后回到这里刷新即可查看最近记录</span></div>
+                </section>
                 <section class="settings-group app-info" id="aboutSettings"><div class="settings-heading"><h2>关于 ClipPort</h2></div><div class="setting-row"><div><strong>应用版本</strong><span id="appVersion">--</span></div><span>yt-dlp + FFmpeg + Electron</span></div><div class="tool-row update-row"><span class="tool-icon blue"><i data-lucide="refresh-cw"></i></span><div><strong>应用更新</strong><span id="updateStatus" role="status" aria-live="polite">正在读取更新状态</span><div class="update-inline-progress" id="updateInlineProgress" hidden><div class="update-progress-track" role="progressbar" aria-label="安装包下载进度" aria-valuemin="0" aria-valuemax="100"><span id="updateInlineBar"></span></div><small id="updateInlineMeta">0%</small></div></div><div class="tool-actions"><button class="secondary-button compact" id="checkUpdates" type="button"><i data-lucide="search"></i><span>检查更新</span></button></div></div></section>
                 <section class="settings-group author-contact" aria-labelledby="authorContactTitle">
                   <div class="settings-heading"><div><h2 id="authorContactTitle">联系作者</h2><p>使用微信扫描二维码添加好友</p></div></div>
@@ -227,6 +243,26 @@
         </aside>
       </div>
     </div>
+    <dialog class="voice-profile-dialog" id="voiceProfileDialog" aria-labelledby="voiceProfileDialogTitle">
+      <form class="voice-profile-form" id="voiceProfileForm">
+        <div class="dialog-heading"><div><p class="eyebrow">本地声音档案</p><h2 id="voiceProfileDialogTitle">新建声音档案</h2></div><button class="icon-button" id="closeVoiceProfileDialog" type="button" aria-label="关闭"><i data-lucide="x"></i></button></div>
+        <div class="segmented-control" role="group" aria-label="声音类型"><button class="active" type="button" data-voice-profile-type="preset" aria-pressed="true"><i data-lucide="badge-check"></i><span>预设音色</span></button><button type="button" data-voice-profile-type="cloned" aria-pressed="false"><i data-lucide="mic-2"></i><span>克隆音色</span></button></div>
+        <div class="voice-profile-form-grid">
+          <label class="control-field" for="newVoiceName"><span>档案名称</span><input id="newVoiceName" maxlength="100" required placeholder="例如：产品旁白"></label>
+          <label class="control-field" for="newVoiceLanguage"><span>主要语言</span><select id="newVoiceLanguage"><option value="zh">中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
+          <label class="control-field" for="newVoiceEngine"><span>语音引擎</span><select id="newVoiceEngine"></select></label>
+          <label class="control-field" id="presetVoiceField" for="newPresetVoice"><span>预设音色</span><select id="newPresetVoice"></select></label>
+        </div>
+        <label class="control-field" for="newVoiceDescription"><span>用途说明（可选）</span><input id="newVoiceDescription" maxlength="500" placeholder="例如：适合短视频解说"></label>
+        <div class="voice-clone-fields" id="voiceCloneFields" hidden>
+          <label class="control-field" for="newVoiceReference"><span>样本中的原文</span><textarea id="newVoiceReference" rows="3" maxlength="1000" placeholder="准确填写声音样本中说出的内容"></textarea></label>
+          <p><i data-lucide="file-audio"></i>创建时选择不超过 50 MB 的 WAV、MP3、M4A、FLAC 或 OGG 音频。</p>
+          <label class="check-control"><input type="checkbox" id="newVoiceConsent"><span class="check-box"><i data-lucide="check"></i></span><span>我确认已取得该声音样本的使用授权</span></label>
+        </div>
+        <p class="form-error" id="voiceProfileError" role="alert" hidden></p>
+        <div class="dialog-actions"><button class="secondary-button" id="cancelVoiceProfile" type="button">取消</button><button class="primary-button" id="submitVoiceProfile" type="submit"><i data-lucide="plus"></i><span>创建档案</span></button></div>
+      </form>
+    </dialog>
     <div class="update-download-status" id="updateDownloadStatus" role="status" aria-live="polite" aria-atomic="true" hidden><span class="update-download-icon"><i data-lucide="download"></i></span><div><div class="update-download-heading"><strong id="updateDownloadTitle">正在下载安装包</strong><b id="updateDownloadPercent">0%</b></div><div class="update-progress-track" id="updateDownloadTrack" role="progressbar" aria-label="安装包下载进度" aria-valuemin="0" aria-valuemax="100"><span id="updateDownloadBar"></span></div><small id="updateDownloadMeta">正在准备下载</small></div></div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"><span class="toast-icon"><i data-lucide="circle-check"></i></span><span><strong id="toastTitle">操作完成</strong><small id="toastMessage"></small></span><button class="icon-button" type="button" id="closeToast" aria-label="关闭通知"><i data-lucide="x"></i></button></div>
     <script src="./vendor/lucide.min.js"></script>

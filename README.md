@@ -1,6 +1,6 @@
 # ClipPort
 
-ClipPort 是一款基于 Electron、yt-dlp 和 FFmpeg/ffprobe 的本地视频解析与下载工具。链接解析、下载、合并与媒体校验均在本机执行。
+ClipPort 是一款基于 Electron、yt-dlp、FFmpeg/ffprobe 和 Voicebox 的本地视频与语音工具。链接解析、下载、合并、媒体校验与语音生成均在本机执行。
 
 ## 当前功能
 
@@ -13,7 +13,8 @@ ClipPort 是一款基于 Electron、yt-dlp 和 FFmpeg/ffprobe 的本地视频解
 - 安装包内置经过官方 SHA-512 校验的 yt-dlp，并支持后续手动更新
 - 内置 FFmpeg/ffprobe，自定义工具路径可覆盖
 - 抖音、哔哩哔哩、YouTube、小红书隔离登录会话与 Cookie 状态校验
-- Voicebox 本地语音生成：声音档案、23 种语言、生成进度、试听、取消与 WAV 保存
+- 内置 Voicebox CPU 服务：10 款语音模型目录与按需下载、预设/克隆声音档案、23 种语言、生成进度、试听、取消与 WAV 保存
+- 设置页诊断日志列表、级别/模块筛选、自动脱敏与本地导出
 - Windows 设备码与 Ed25519 离线授权
 
 首版暂不支持播放列表逐项选择和直播下载。
@@ -26,11 +27,13 @@ npm install
 npm start
 ```
 
-Windows 安装包已内置 yt-dlp、FFmpeg 和 ffprobe，安装后无需另行下载依赖即可开始解析。设置页仍可手动更新 yt-dlp；应用只从 yt-dlp 官方 GitHub Release 获取文件，并在启用前校验官方 SHA-512 清单。
+Windows 安装包已内置 yt-dlp、FFmpeg、ffprobe 和 Voicebox CPU 服务，安装后无需另行安装运行依赖。设置页仍可手动更新 yt-dlp；应用只从 yt-dlp 官方 GitHub Release 获取文件，并在启用前校验官方 SHA-512 清单。
 
 ### Voicebox 集成
 
-语音功能通过 Voicebox 官方本地 HTTP API 工作。请先安装并启动 [Voicebox](https://github.com/jamiepine/voicebox)，在 Voicebox 中完成模型下载和声音档案创建；ClipPort 会自动连接 `http://127.0.0.1:17493`。模型和生成任务仍由 Voicebox 管理，ClipPort 不打包 PyTorch 或语音模型，也不会把文案、声音或生成音频发送到远程服务。
+语音功能使用安装包内置的 [Voicebox](https://github.com/jamiepine/voicebox) v0.5.0 CPU 服务。ClipPort 启动时在随机本机回环端口拉起服务，并在退出时关闭；渲染页面无法直接访问该端口。首次使用某个引擎前，在“语音 > 语音模型库”查看模型语言、预计体积和下载状态，按需下载对应模型即可，无需安装独立 Voicebox 应用。
+
+运行数据、模型、声音档案与生成记录保存在 ClipPort 用户数据目录下的 `voicebox` 子目录，不随应用升级或重新安装覆盖。模型来自对应提供者的 Hugging Face 仓库，体积和许可各不相同；安装包只内置运行时，不预装语音模型，也不会把文案、声音或生成音频发送到远程服务。
 
 ClipPort 仅允许连接本机回环地址，并对声音档案、文本长度、语言和任务 ID 做边界校验。请只使用本人声音，或已取得明确授权的声音；不得用于冒充、欺诈或其他侵犯他人权益的用途。
 
@@ -46,6 +49,8 @@ npm run build
 `npm run build` 会生成可直接运行的 `dist/win-unpacked/ClipPort.exe`。`npm run dist` 用于生成 Windows NSIS 安装包。
 
 打包前会执行 `npm run prepare:ytdlp`，下载当前官方 stable Windows x64 版本、核对 `SHA2-512SUMS`，再将通过校验的 `yt-dlp.exe` 写入安装包。可设置 `CLIPPORT_YTDLP_VERSION`（例如 `2025.08.22`）固定构建版本；未设置时使用最新 stable 版本。
+
+构建还会执行 `npm run prepare:voicebox`，下载固定的官方 Voicebox v0.5.0 Windows MSI、校验预置 SHA-256，并从中提取 CPU 服务程序。提取后的二进制会再次计算哈希并写入本地元数据；GitHub Actions 使用版本化缓存，避免每次发布重复下载约 543 MB 的官方资产。Voicebox 的 MIT 许可证会随安装包写入 `resources/licenses`。
 
 ## 设备授权签发
 

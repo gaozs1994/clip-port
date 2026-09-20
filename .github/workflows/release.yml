@@ -17,7 +17,7 @@ jobs:
   release:
     name: Build and publish Windows installer
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -31,6 +31,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Cache Voicebox runtime
+        uses: actions/cache@v4
+        with:
+          path: vendor/voicebox
+          key: voicebox-win32-x64-v0.5.0-${{ hashFiles('scripts/prepare-voicebox.cjs') }}
 
       - name: Set release version
         run: npm version --no-git-tag-version "0.1.${{ github.run_number }}"

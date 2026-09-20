@@ -4,6 +4,7 @@ dist/
 output/
 tools/
 vendor/yt-dlp/
+vendor/voicebox/
 .local-license/
 *.log
 .DS_Store

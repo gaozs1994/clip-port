@@ -9,6 +9,7 @@
   "scripts": {
     "prepare:renderer": "node scripts/vendor-assets.cjs",
     "prepare:ytdlp": "node scripts/prepare-ytdlp.cjs",
+    "prepare:voicebox": "node scripts/prepare-voicebox.cjs",
     "postinstall": "node scripts/vendor-assets.cjs",
     "start": "npm run prepare:renderer && electron .",
     "dev": "npm start",
@@ -17,8 +18,8 @@
     "test": "node --test",
     "license:keygen": "node scripts/license-issuer.cjs generate-key",
     "license:issue": "node scripts/license-issuer.cjs issue",
-    "build": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && electron-builder --dir",
-    "dist": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && electron-builder --win nsis --publish never"
+    "build": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && npm run prepare:voicebox && electron-builder --dir",
+    "dist": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && npm run prepare:voicebox && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -41,6 +42,14 @@
       {
         "from": "vendor/yt-dlp/win32-x64/yt-dlp.exe",
         "to": "tools/yt-dlp.exe"
+      },
+      {
+        "from": "vendor/voicebox/win32-x64/voicebox-server.exe",
+        "to": "tools/voicebox/voicebox-server.exe"
+      },
+      {
+        "from": "licenses/voicebox-MIT.txt",
+        "to": "licenses/voicebox-MIT.txt"
       }
     ],
     "files": [
