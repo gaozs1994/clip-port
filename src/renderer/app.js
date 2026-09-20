@@ -103,7 +103,6 @@
     taskFilter: "all",
     parsing: false,
     diagnosticLogs: [],
-    logFilters: { level: "all", source: "all" },
     logRenderLimit: 100,
   };
 
@@ -1025,15 +1024,10 @@
     const list = $("#diagnosticLogList");
     if (!list) return;
     const logs = Array.isArray(state.diagnosticLogs) ? state.diagnosticLogs : [];
-    const filtered = logs.filter((entry) => (
-      (state.logFilters.level === "all" || entry.level === state.logFilters.level)
-      && (state.logFilters.source === "all" || entry.source === state.logFilters.source)
-    ));
-    const visible = filtered.slice(0, state.logRenderLimit);
-    const filteredCount = filtered.length === logs.length ? `${filtered.length} 条记录` : `${filtered.length} / ${logs.length} 条匹配`;
-    $("#diagnosticLogCount").textContent = visible.length < filtered.length
-      ? `${visible.length} / ${filtered.length} 条已显示${filtered.length === logs.length ? "" : ` · 共 ${logs.length} 条`}`
-      : filteredCount;
+    const visible = logs.slice(0, state.logRenderLimit);
+    $("#diagnosticLogCount").textContent = visible.length < logs.length
+      ? `${visible.length} / ${logs.length} 条已显示`
+      : `${logs.length} 条记录`;
     list.replaceChildren();
     for (const entry of visible) {
       const row = element("article", `diagnostic-log-row ${entry.level || "info"}`);
@@ -1056,10 +1050,10 @@
       append(row, time, levelBadge, source, output);
       list.append(row);
     }
-    $("#diagnosticLogEmpty").hidden = filtered.length > 0;
-    list.hidden = filtered.length === 0;
-    $("#diagnosticLoadMoreRow").hidden = visible.length >= filtered.length;
-    $("#loadMoreDiagnosticLogs").textContent = visible.length < filtered.length ? `加载更多（剩余 ${filtered.length - visible.length} 条）` : "加载更多";
+    $("#diagnosticLogEmpty").hidden = logs.length > 0;
+    list.hidden = logs.length === 0;
+    $("#diagnosticLoadMoreRow").hidden = visible.length >= logs.length;
+    $("#loadMoreDiagnosticLogs").textContent = visible.length < logs.length ? `加载更多（剩余 ${logs.length - visible.length} 条）` : "加载更多";
     refreshIcons();
   }
 
@@ -1770,6 +1764,26 @@
     }
   }
 
+  function handleVoicePlaybackError() {
+    const player = $("#voicePlayer");
+    const messages = {
+      1: "语音播放已中止，请重新生成后再试",
+      2: "读取生成音频失败，请稍后重试",
+      3: "生成音频无法解码，请重新生成",
+      4: "生成音频格式不受支持",
+    };
+    const mediaErrorCode = player.error?.code || 0;
+    const message = messages[mediaErrorCode] || "读取生成音频失败，请稍后重试";
+    showToast("无法播放语音", message, "error");
+    recordRendererError("语音播放失败", {
+      generationId: state.voiceboxGeneration?.id || "",
+      mediaErrorCode,
+      mediaErrorMessage: player.error?.message || "",
+      networkState: player.networkState,
+      readyState: player.readyState,
+    });
+  }
+
   function recordRendererError(message, details) {
     if (!api.logs?.record || recordRendererError.pending) return;
     recordRendererError.pending = true;
@@ -1842,14 +1856,12 @@
     $("#cancelVoice").addEventListener("click", cancelVoiceGeneration);
     $("#saveVoiceAudio").addEventListener("click", saveVoiceAudio);
     $("#regenerateVoice").addEventListener("click", () => $("#voiceForm").requestSubmit());
-    $("#voicePlayer").addEventListener("error", () => showToast("无法播放语音", "请确认 Voicebox 仍在运行", "error"));
+    $("#voicePlayer").addEventListener("error", handleVoicePlaybackError);
     $("#checkUpdates").addEventListener("click", handleUpdateAction);
     $("#sidebarUpdateAction").addEventListener("click", handleUpdateAction);
     $("#refreshDiagnosticLogs").addEventListener("click", () => refreshDiagnosticLogs(true));
     $("#exportDiagnosticLogs").addEventListener("click", exportDiagnosticLogs);
     $("#clearDiagnosticLogs").addEventListener("click", clearDiagnosticLogs);
-    $("#logLevelFilter").addEventListener("change", (event) => { state.logFilters.level = event.target.value; state.logRenderLimit = 100; renderDiagnosticLogs(); });
-    $("#logSourceFilter").addEventListener("change", (event) => { state.logFilters.source = event.target.value; state.logRenderLimit = 100; renderDiagnosticLogs(); });
     $("#loadMoreDiagnosticLogs").addEventListener("click", () => { state.logRenderLimit += 100; renderDiagnosticLogs(); });
     $("#licenseForm").addEventListener("submit", activateLicense);
     $("#licenseCode").addEventListener("input", (event) => {

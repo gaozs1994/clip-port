@@ -128,6 +128,33 @@ test("starts an async Voicebox generation and emits a playable completion", asyn
   assert.equal(Object.hasOwn(posted, "consent"), false);
 });
 
+test("proxies Voicebox byte ranges required by the audio player", async () => {
+  const id = "a1111111-1111-4111-8111-111111111111";
+  let requestedRange = "";
+  const service = new VoiceboxService({
+    fetchImpl: async (_url, options = {}) => {
+      requestedRange = options.headers?.range || "";
+      return new Response(new Uint8Array([82, 73, 70, 70]), {
+        status: 206,
+        headers: {
+          "content-type": "audio/wav",
+          "content-length": "4",
+          "content-range": "bytes 0-3/16",
+          "accept-ranges": "bytes",
+        },
+      });
+    },
+  });
+  const response = await service.audioResponse(id, { range: "bytes=0-3" });
+  assert.equal(requestedRange, "bytes=0-3");
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-type"), "audio/wav");
+  assert.equal(response.headers.get("content-length"), "4");
+  assert.equal(response.headers.get("content-range"), "bytes 0-3/16");
+  assert.equal(response.headers.get("accept-ranges"), "bytes");
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([82, 73, 70, 70]));
+});
+
 test("returns an offline status when the local Voicebox service is unavailable", async () => {
   const service = new VoiceboxService({ fetchImpl: async () => { throw new Error("ECONNREFUSED"); } });
   const status = await service.getStatus();

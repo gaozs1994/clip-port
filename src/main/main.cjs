@@ -32,7 +32,7 @@ const { AppError, assertTaskId, sanitizeSettingsPatch } = require("./services/va
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "clipport",
-    privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, codeCache: true },
   },
 ]);
 
@@ -122,7 +122,9 @@ function setupProtocol() {
     const voiceboxAudioMatch = relative.match(/^voicebox-audio\/([a-f0-9-]{20,64})$/i);
     if (voiceboxAudioMatch) {
       if (!voiceboxService) return new Response("Voicebox unavailable", { status: 503 });
-      return voiceboxService.audioResponse(voiceboxAudioMatch[1]);
+      return voiceboxService.audioResponse(voiceboxAudioMatch[1], {
+        range: request.headers.get("range"),
+      });
     }
     const root = rendererRoot();
     const target = path.resolve(root, relative);

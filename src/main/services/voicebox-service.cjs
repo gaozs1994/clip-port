@@ -447,20 +447,27 @@ class VoiceboxService {
     return update;
   }
 
-  async audioResponse(value) {
+  async audioResponse(value, { range } = {}) {
     const id = assertVoiceboxGenerationId(value);
     try {
+      const requestedRange = typeof range === "string" && /^bytes=(?:\d+-\d*|-\d+)$/.test(range) ? range : "";
       const response = await this.fetch(`${this.origin}/audio/${encodeURIComponent(id)}`, {
         redirect: "error",
-        headers: { accept: "audio/*", "x-voicebox-client-id": "clipport" },
+        headers: {
+          accept: "audio/*",
+          "x-voicebox-client-id": "clipport",
+          ...(requestedRange ? { range: requestedRange } : {}),
+        },
       });
       if (!response.ok || !response.body) return new Response("Audio unavailable", { status: response.status || 502 });
+      const headers = new Headers({ "cache-control": "no-store" });
+      for (const name of ["content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified"]) {
+        const header = response.headers.get(name);
+        if (header) headers.set(name, header);
+      }
       return new Response(response.body, {
-        status: 200,
-        headers: {
-          "content-type": response.headers.get("content-type") || "audio/wav",
-          "cache-control": "no-store",
-        },
+        status: response.status,
+        headers,
       });
     } catch {
       return new Response("Voicebox unavailable", { status: 502 });

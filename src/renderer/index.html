@@ -196,13 +196,9 @@
             <div class="terminal-log-shell">
               <div class="terminal-log-titlebar"><span><i data-lucide="terminal"></i>clipport://diagnostics</span><strong id="diagnosticLogCount">0 条记录</strong></div>
               <div class="terminal-log-privacy"><i data-lucide="shield-check"></i><span>仅保存在本机；链接、Cookie、授权码、设备码和本机路径会在写入前自动隐藏。</span></div>
-              <div class="diagnostic-toolbar" aria-label="日志筛选">
-                <label><span>级别</span><select id="logLevelFilter"><option value="all">全部级别</option><option value="error">错误</option><option value="warn">警告</option><option value="info">信息</option></select></label>
-                <label><span>模块</span><select id="logSourceFilter"><option value="all">全部模块</option><option value="app">应用</option><option value="renderer">界面</option><option value="media">媒体解析</option><option value="tasks">下载任务</option><option value="auth">平台登录</option><option value="toolchain">工具链</option><option value="updates">应用更新</option><option value="license">设备授权</option><option value="voicebox">Voicebox</option><option value="settings">设置</option><option value="files">文件</option><option value="security">安全</option></select></label>
-              </div>
               <div class="diagnostic-log-head" aria-hidden="true"><span>时间</span><span>级别</span><span>模块</span><span>消息</span></div>
               <div class="diagnostic-log-list" id="diagnosticLogList" aria-live="polite"></div>
-              <div class="diagnostic-empty" id="diagnosticLogEmpty" hidden><i data-lucide="file-search"></i><strong>没有匹配的日志</strong><span>遇到异常后刷新即可查看最近记录</span></div>
+              <div class="diagnostic-empty" id="diagnosticLogEmpty" hidden><i data-lucide="file-search"></i><strong>暂无诊断日志</strong><span>遇到异常后刷新即可查看最近记录</span></div>
               <div class="diagnostic-load-more" id="diagnosticLoadMoreRow" hidden><button class="text-button" id="loadMoreDiagnosticLogs" type="button">加载更多</button></div>
             </div>
           </section>
