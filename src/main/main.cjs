@@ -212,7 +212,7 @@ function registerIpc() {
       voiceboxStatus,
       updateStatus: updateManager.getStatus(),
       licenseStatus: licenseManager.getStatus(),
-      diagnosticLogs: diagnosticLog.list({ limit: 200 }),
+      diagnosticLogs: diagnosticLog.list({ limit: 500 }),
     };
   });
 
@@ -573,8 +573,6 @@ async function initialize() {
   updateManager = new UpdateManager({
     updater: autoUpdater,
     app,
-    dialog,
-    getParentWindow: () => mainWindow,
     onStatus: (status) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setProgressBar(status.status === "downloading" ? Math.max(0, Math.min(1, Number(status.progress) / 100 || 0)) : -1);

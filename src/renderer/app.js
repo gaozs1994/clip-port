@@ -65,10 +65,10 @@
   ].map((model) => ({ downloaded: false, downloading: false, loaded: false, ...model }));
   const VOICEBOX_ACTIVE_STATES = new Set(["queued", "loading_model", "generating"]);
   const ACTIVE_STATES = new Set(["preparing", "downloading", "processing", "verifying", "pausing", "canceling"]);
-  const LOG_LEVEL_UI = {
-    error: { label: "错误", icon: "circle-x" },
-    warn: { label: "警告", icon: "triangle-alert" },
-    info: { label: "信息", icon: "info" },
+  const LOG_LEVEL_TEXT = {
+    error: "ERROR",
+    warn: "WARN",
+    info: "INFO",
   };
   const LOG_SOURCE_LABELS = {
     app: "应用",
@@ -104,6 +104,7 @@
     parsing: false,
     diagnosticLogs: [],
     logFilters: { level: "all", source: "all" },
+    logRenderLimit: 100,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -165,7 +166,7 @@
       { id: "youtube", name: "YouTube", domain: "youtube.com", status: "not_connected", message: "未检测到登录状态", cookieCount: 0, expiresAt: "", lastCheckedAt: "", lastVerifiedAt: "" },
       { id: "xiaohongshu", name: "小红书", domain: "xiaohongshu.com", status: "invalid", message: "Cookie 不完整，请重新登录", cookieCount: 2, expiresAt: "", lastCheckedAt: new Date().toISOString(), lastVerifiedAt: "" },
     ];
-    let demoUpdateStatus = { status: "idle", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "可手动检查更新" };
+    let demoUpdateStatus = { status: "current", currentVersion: "0.1.0-preview", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "已是最新版本" };
     const demoIssuedAt = new Date();
     const demoExpiresAt = new Date(demoIssuedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
     let demoLicenseStatus = { status: "active", active: true, hasLicense: true, deviceCode: "CPD1-DEMO-0000-0000-0000-0000-0000-0000", licenseId: "preview-license", holder: "预览用户", issuedAt: demoIssuedAt.toISOString(), expiresAt: demoExpiresAt.toISOString(), message: "设备已授权" };
@@ -196,6 +197,15 @@
     const emitVoicebox = (status) => listeners.voicebox.forEach((callback) => callback(structuredClone(status)));
     const emitVoiceboxStatus = () => listeners.voiceboxStatus.forEach((callback) => callback(structuredClone(demoVoiceboxStatus)));
     const emitVoiceboxModel = (status) => listeners.voiceboxModel.forEach((callback) => callback(structuredClone(status)));
+    const downloadDemoUpdate = async () => {
+      const totalBytes = 96 * 1024 * 1024;
+      for (const percent of [0, 18, 43, 72, 100]) {
+        demoUpdateStatus = { ...demoUpdateStatus, status: percent === 100 ? "downloaded" : "downloading", progress: percent, downloadedBytes: totalBytes * percent / 100, totalBytes, bytesPerSecond: percent === 100 ? 0 : 6.4 * 1024 * 1024, message: percent === 100 ? "更新已下载，等待重启安装" : `正在下载更新 ${percent}%` };
+        emitUpdate();
+        await sleep(350);
+      }
+      return structuredClone(demoUpdateStatus);
+    };
     const findDemoAuth = (platformId) => demoAuthPlatforms.find((platform) => platform.id === platformId);
     const progressDemo = (task) => {
       if (timer) clearInterval(timer);
@@ -273,17 +283,10 @@
         status: () => ok(structuredClone(demoUpdateStatus)),
         check: async () => {
           demoUpdateStatus = { ...demoUpdateStatus, status: "checking", message: "正在检查新版本" }; emitUpdate(); await sleep(450);
-          demoUpdateStatus = { ...demoUpdateStatus, status: "available", latestVersion: "0.1.1-preview", message: "发现新版本 0.1.1-preview" }; emitUpdate(); return ok(structuredClone(demoUpdateStatus));
+          demoUpdateStatus = { ...demoUpdateStatus, status: "available", latestVersion: "0.1.1-preview", message: "发现新版本 0.1.1-preview" }; emitUpdate();
+          return ok(await downloadDemoUpdate());
         },
-        download: async () => {
-          const totalBytes = 96 * 1024 * 1024;
-          for (const percent of [0, 18, 43, 72, 100]) {
-            demoUpdateStatus = { ...demoUpdateStatus, status: percent === 100 ? "downloaded" : "downloading", progress: percent, downloadedBytes: totalBytes * percent / 100, totalBytes, bytesPerSecond: percent === 100 ? 0 : 6.4 * 1024 * 1024, message: percent === 100 ? "更新已下载，等待重启安装" : `正在下载更新 ${percent}%` };
-            emitUpdate();
-            await sleep(350);
-          }
-          return ok(structuredClone(demoUpdateStatus));
-        },
+        download: async () => ok(await downloadDemoUpdate()),
         install: () => ok(false),
       },
       license: {
@@ -451,7 +454,8 @@
   }
 
   function showView(view) {
-    state.view = ["download", "voice", "tasks", "history", "settings"].includes(view) ? view : "download";
+    const previousView = state.view;
+    state.view = ["download", "voice", "tasks", "history", "logs", "settings"].includes(view) ? view : "download";
     $$("[data-view]").forEach((section) => {
       const active = section.dataset.view === state.view;
       section.hidden = !active;
@@ -464,12 +468,15 @@
     });
     history.replaceState(null, "", `#${state.view}`);
     $("#workspace").scrollTop = 0;
+    if (state.view === "logs" && previousView !== "logs") {
+      state.logRenderLimit = 100;
+      refreshDiagnosticLogs();
+    }
   }
 
   function activateSettingsSection(sectionId, behavior = "smooth") {
     $$(`[data-settings-anchor]`).forEach((button) => button.classList.toggle("active", button.dataset.settingsAnchor === sectionId));
     $(`#${sectionId}`)?.scrollIntoView({ behavior, block: "start" });
-    if (sectionId === "diagnosticSettings") refreshDiagnosticLogs();
   }
 
   function focusLicenseSettings() {
@@ -748,15 +755,11 @@
     const status = state.toolchain;
     if (!status) return;
     const { ytDlp, ffmpeg, ffprobe } = status.tools;
-    $("#sideYtDlpVersion").textContent = compactVersion(ytDlp.version);
     $("#ytDlpStatus").textContent = ytDlp.available ? `${compactVersion(ytDlp.version)} · ${ytDlp.source}` : "未安装，需要安装或选择文件";
     $("#ffmpegStatus").textContent = ffmpeg.available ? `${compactVersion(ffmpeg.version)} · ${ffmpeg.source}` : "不可用，请选择可执行文件";
     $("#ffprobeStatus").textContent = ffprobe.available ? `${compactVersion(ffprobe.version)} · ${ffprobe.source}` : "不可用，请选择可执行文件";
     $("#toolchainAlert").hidden = status.ready;
     $("#allToolsReady").hidden = !status.ready;
-    const dot = $("#engineStatusDot");
-    dot.className = `status-dot${status.ready ? "" : " error"}`;
-    dot.setAttribute("aria-label", status.ready ? "工具链可用" : "工具链不可用");
   }
 
   function taskCounts() {
@@ -1016,7 +1019,6 @@
     renderUpdateStatus();
     renderAuthPlatforms();
     renderToolchain();
-    renderDiagnosticLogs();
   }
 
   function renderDiagnosticLogs() {
@@ -1027,37 +1029,43 @@
       (state.logFilters.level === "all" || entry.level === state.logFilters.level)
       && (state.logFilters.source === "all" || entry.source === state.logFilters.source)
     ));
-    $("#diagnosticLogCount").textContent = filtered.length === logs.length ? `${logs.length} 条最近记录` : `${filtered.length} / ${logs.length} 条记录`;
+    const visible = filtered.slice(0, state.logRenderLimit);
+    const filteredCount = filtered.length === logs.length ? `${filtered.length} 条记录` : `${filtered.length} / ${logs.length} 条匹配`;
+    $("#diagnosticLogCount").textContent = visible.length < filtered.length
+      ? `${visible.length} / ${filtered.length} 条已显示${filtered.length === logs.length ? "" : ` · 共 ${logs.length} 条`}`
+      : filteredCount;
     list.replaceChildren();
-    for (const entry of filtered) {
-      const level = LOG_LEVEL_UI[entry.level] || LOG_LEVEL_UI.info;
+    for (const entry of visible) {
       const row = element("article", `diagnostic-log-row ${entry.level || "info"}`);
-      const meta = element("div", "diagnostic-log-meta");
-      const levelBadge = element("span", `diagnostic-level ${entry.level || "info"}`);
-      append(levelBadge, icon(level.icon), document.createTextNode(level.label));
-      const time = element("time", "", formatLogDate(entry.timestamp));
+      const levelName = LOG_LEVEL_TEXT[entry.level] || "INFO";
+      const levelBadge = element("span", `diagnostic-level ${entry.level || "info"}`, levelName);
+      const time = element("time", "diagnostic-time", formatLogDate(entry.timestamp));
       time.dateTime = entry.timestamp || "";
       time.title = entry.timestamp ? formatLicenseDate(entry.timestamp, true) : "未知时间";
-      append(meta, levelBadge, element("span", "diagnostic-source", LOG_SOURCE_LABELS[entry.source] || entry.source || "应用"), time);
-      append(row, meta, element("p", "diagnostic-message", entry.message || "未提供日志信息"));
+      const source = element("span", "diagnostic-source", LOG_SOURCE_LABELS[entry.source] || entry.source || "应用");
+      const output = element("div", "diagnostic-output");
+      append(output, element("p", "diagnostic-message", entry.message || "未提供日志信息"));
       const hasDetails = entry.details && (typeof entry.details !== "object" || Object.keys(entry.details).length > 0);
       if (hasDetails) {
         const disclosure = element("details", "diagnostic-details");
-        const summary = element("summary", "", "查看详情");
-        const output = element("pre", "", typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details, null, 2));
-        append(disclosure, summary, output);
-        row.append(disclosure);
+        const summary = element("summary", "", "展开详情");
+        const detailOutput = element("pre", "", typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details, null, 2));
+        append(disclosure, summary, detailOutput);
+        output.append(disclosure);
       }
+      append(row, time, levelBadge, source, output);
       list.append(row);
     }
     $("#diagnosticLogEmpty").hidden = filtered.length > 0;
     list.hidden = filtered.length === 0;
+    $("#diagnosticLoadMoreRow").hidden = visible.length >= filtered.length;
+    $("#loadMoreDiagnosticLogs").textContent = visible.length < filtered.length ? `加载更多（剩余 ${filtered.length - visible.length} 条）` : "加载更多";
     refreshIcons();
   }
 
   function upsertDiagnosticLog(entry) {
     if (!entry?.id) return;
-    state.diagnosticLogs = [entry, ...(state.diagnosticLogs || []).filter((item) => item.id !== entry.id)].slice(0, 200);
+    state.diagnosticLogs = [entry, ...(state.diagnosticLogs || []).filter((item) => item.id !== entry.id)].slice(0, 500);
     renderDiagnosticLogs();
   }
 
@@ -1066,7 +1074,8 @@
     const button = $("#refreshDiagnosticLogs");
     if (button) button.disabled = true;
     try {
-      state.diagnosticLogs = await call(api.logs.list({ limit: 200 }));
+      state.diagnosticLogs = await call(api.logs.list({ limit: 500 }));
+      state.logRenderLimit = 100;
       renderDiagnosticLogs();
       if (showResult) showToast("诊断日志已刷新", `已读取 ${state.diagnosticLogs.length} 条最近记录`);
     } catch (error) {
@@ -1153,6 +1162,30 @@
     const button = $("#checkUpdates");
     if (!statusNode || !button) return;
 
+    const sidebarVersion = $("#sidebarAppVersion");
+    const sidebarAction = $("#sidebarUpdateAction");
+    const sidebarText = $("#sidebarUpdateText");
+    const sidebarDot = $("#sidebarUpdateDot");
+    const latestVersion = status.latestVersion ? `v${status.latestVersion}` : "";
+    const sidebarLabels = {
+      idle: "等待检查更新",
+      checking: "正在检查更新",
+      current: "已是最新版",
+      available: latestVersion ? `发现 ${latestVersion}，准备下载` : "发现新版本，准备下载",
+      downloading: `下载新版本 ${Math.round(Number(status.progress) || 0)}%`,
+      downloaded: latestVersion ? `新版本 ${latestVersion}，点击安装` : "新版本已下载，点击安装",
+      error: "检查失败，稍后自动重试",
+      disabled: "开发版不检查更新",
+    };
+    const installReady = status.status === "downloaded";
+    sidebarVersion.textContent = state.appVersion ? `v${state.appVersion}` : "--";
+    sidebarText.textContent = sidebarLabels[status.status] || status.message || "等待检查更新";
+    sidebarDot.className = `status-dot${new Set(["idle", "checking", "disabled"]).has(status.status) ? " pending" : status.status === "error" ? " error" : ""}`;
+    sidebarAction.disabled = !installReady;
+    sidebarAction.classList.toggle("actionable", installReady);
+    sidebarAction.title = installReady ? "重启 ClipPort 并安装已下载的更新" : sidebarText.textContent;
+    sidebarAction.setAttribute("aria-label", sidebarAction.title);
+
     statusNode.textContent = status.message || "可手动检查更新";
     const downloading = status.status === "downloading";
     const percent = Math.max(0, Math.min(100, Number(status.progress) || 0));
@@ -1184,6 +1217,18 @@
     else if (status.status === "downloaded") buttonLabel.textContent = "重启安装";
     else if (status.status === "disabled") buttonLabel.textContent = "仅安装版支持";
     else buttonLabel.textContent = "检查更新";
+    const actionIconName = status.status === "downloaded"
+      ? "refresh-cw"
+      : status.status === "downloading" || status.status === "available"
+        ? "download"
+        : status.status === "checking"
+          ? "loader-circle"
+          : "search";
+    const actionIcon = $("svg, i", button);
+    if (actionIcon?.dataset.lucide !== actionIconName) {
+      actionIcon?.replaceWith(icon(actionIconName));
+      refreshIcons();
+    }
   }
 
   function upsertTask(task) {
@@ -1330,16 +1375,6 @@
     } catch (error) { showToast("设置保存失败", error.message, "error"); }
   }
 
-  async function refreshTools(showResult = true) {
-    $("#checkTools").disabled = true;
-    try {
-      state.toolchain = await call(api.tools.status());
-      renderToolchain();
-      if (showResult) showToast(state.toolchain.ready ? "工具链可用" : "工具链需要处理", state.toolchain.ready ? "所有组件已通过自检" : "请在设置中安装或选择缺失工具", state.toolchain.ready ? "success" : "error");
-    } catch (error) { showToast("检查失败", error.message, "error"); }
-    finally { $("#checkTools").disabled = false; }
-  }
-
   async function handleUpdateAction() {
     const status = state.updateStatus?.status;
     const method = status === "available" ? "download" : status === "downloaded" ? "install" : "check";
@@ -1352,7 +1387,8 @@
       if (state.updateStatus?.status === "current") showToast("已是最新版本", `当前版本 ${state.appVersion}`);
       else if (state.updateStatus?.status === "error") showToast("检查更新失败", state.updateStatus.message, "error");
     } catch (error) {
-      showToast(method === "download" ? "更新下载失败" : "检查更新失败", error.message, "error");
+      const title = method === "download" ? "更新下载失败" : method === "install" ? "无法安装更新" : "检查更新失败";
+      showToast(title, error.message, "error");
     }
   }
 
@@ -1807,13 +1843,14 @@
     $("#saveVoiceAudio").addEventListener("click", saveVoiceAudio);
     $("#regenerateVoice").addEventListener("click", () => $("#voiceForm").requestSubmit());
     $("#voicePlayer").addEventListener("error", () => showToast("无法播放语音", "请确认 Voicebox 仍在运行", "error"));
-    $("#checkTools").addEventListener("click", () => refreshTools(true));
     $("#checkUpdates").addEventListener("click", handleUpdateAction);
+    $("#sidebarUpdateAction").addEventListener("click", handleUpdateAction);
     $("#refreshDiagnosticLogs").addEventListener("click", () => refreshDiagnosticLogs(true));
     $("#exportDiagnosticLogs").addEventListener("click", exportDiagnosticLogs);
     $("#clearDiagnosticLogs").addEventListener("click", clearDiagnosticLogs);
-    $("#logLevelFilter").addEventListener("change", (event) => { state.logFilters.level = event.target.value; renderDiagnosticLogs(); });
-    $("#logSourceFilter").addEventListener("change", (event) => { state.logFilters.source = event.target.value; renderDiagnosticLogs(); });
+    $("#logLevelFilter").addEventListener("change", (event) => { state.logFilters.level = event.target.value; state.logRenderLimit = 100; renderDiagnosticLogs(); });
+    $("#logSourceFilter").addEventListener("change", (event) => { state.logFilters.source = event.target.value; state.logRenderLimit = 100; renderDiagnosticLogs(); });
+    $("#loadMoreDiagnosticLogs").addEventListener("click", () => { state.logRenderLimit += 100; renderDiagnosticLogs(); });
     $("#licenseForm").addEventListener("submit", activateLicense);
     $("#licenseCode").addEventListener("input", (event) => {
       event.currentTarget.removeAttribute("aria-invalid");
@@ -1850,7 +1887,7 @@
     try {
       const bootstrap = await call(api.app.bootstrap());
       Object.assign(state, bootstrap);
-      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); renderVoicebox(); selectPreset("recommended");
+      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); renderVoicebox(); renderDiagnosticLogs(); selectPreset("recommended");
       showView(location.hash.slice(1) || "download");
       api.events.onTaskChanged(upsertTask);
       api.events.onHistoryChanged(upsertHistory);

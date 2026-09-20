@@ -7,15 +7,26 @@ const DEFAULT_STATE = Object.freeze({
   bytesPerSecond: null,
   message: "启动后自动检查更新",
 });
+const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 class UpdateManager {
-  constructor({ updater, app, dialog, platform = process.platform, getParentWindow = () => null, onStatus = () => {}, beforeInstall = async () => {} }) {
+  constructor({
+    updater,
+    app,
+    platform = process.platform,
+    onStatus = () => {},
+    beforeInstall = async () => {},
+    checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
+    setTimer = setTimeout,
+    clearTimer = clearTimeout,
+  }) {
     this.updater = updater;
     this.app = app;
-    this.dialog = dialog;
-    this.getParentWindow = getParentWindow;
     this.onStatus = onStatus;
     this.beforeInstall = beforeInstall;
+    this.checkIntervalMs = Number.isFinite(checkIntervalMs) && checkIntervalMs > 0 ? checkIntervalMs : DEFAULT_CHECK_INTERVAL_MS;
+    this.setTimer = setTimer;
+    this.clearTimer = clearTimer;
     this.enabled = Boolean(app.isPackaged && platform === "win32");
     this.state = {
       ...DEFAULT_STATE,
@@ -25,12 +36,11 @@ class UpdateManager {
     };
     this.checkPromise = null;
     this.downloadPromise = null;
-    this.startTimer = null;
-    this.promptedAvailableVersion = "";
-    this.promptedDownloadedVersion = "";
+    this.scheduleTimer = null;
+    this.started = false;
 
     updater.autoDownload = false;
-    updater.autoInstallOnAppQuit = true;
+    updater.autoInstallOnAppQuit = false;
     updater.allowPrerelease = false;
     updater.logger = null;
     this.bindEvents();
@@ -46,7 +56,7 @@ class UpdateManager {
     this.updater.on("update-available", (info = {}) => {
       const latestVersion = String(info.version || "");
       this.setState({ status: "available", latestVersion, progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: latestVersion ? `发现新版本 ${latestVersion}` : "发现新版本" });
-      void this.promptAvailable(latestVersion);
+      void this.download();
     });
     this.updater.on("download-progress", (progress = {}) => {
       const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
@@ -58,7 +68,6 @@ class UpdateManager {
     this.updater.on("update-downloaded", (info = {}) => {
       const latestVersion = String(info.version || this.state.latestVersion || "");
       this.setState({ status: "downloaded", latestVersion, progress: 100, downloadedBytes: this.state.totalBytes, bytesPerSecond: 0, message: "更新已下载，等待重启安装" });
-      void this.promptDownloaded(latestVersion);
     });
     this.updater.on("error", () => {
       this.setState({
@@ -82,21 +91,28 @@ class UpdateManager {
   }
 
   start(delay = 8000) {
-    if (!this.enabled || this.startTimer) return;
-    this.startTimer = setTimeout(() => {
-      this.startTimer = null;
-      void this.check();
+    if (!this.enabled || this.started) return;
+    this.started = true;
+    this.scheduleNext(delay);
+  }
+
+  scheduleNext(delay) {
+    if (!this.started || this.scheduleTimer) return;
+    this.scheduleTimer = this.setTimer(() => {
+      this.scheduleTimer = null;
+      Promise.resolve(this.check()).finally(() => this.scheduleNext(this.checkIntervalMs));
     }, delay);
-    this.startTimer.unref?.();
+    this.scheduleTimer?.unref?.();
   }
 
   shutdown() {
-    if (this.startTimer) clearTimeout(this.startTimer);
-    this.startTimer = null;
+    this.started = false;
+    if (this.scheduleTimer) this.clearTimer(this.scheduleTimer);
+    this.scheduleTimer = null;
   }
 
   async check() {
-    if (!this.enabled || this.downloadPromise) return this.getStatus();
+    if (!this.enabled || this.downloadPromise || new Set(["downloading", "downloaded"]).has(this.state.status)) return this.getStatus();
     if (this.checkPromise) return this.checkPromise;
 
     this.setState({ status: "checking", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "正在检查新版本" });
@@ -129,45 +145,6 @@ class UpdateManager {
     this.updater.quitAndInstall(false, true);
     return true;
   }
-
-  async showMessageBox(options) {
-    const parent = this.getParentWindow();
-    return parent
-      ? this.dialog.showMessageBox(parent, options)
-      : this.dialog.showMessageBox(options);
-  }
-
-  async promptAvailable(version) {
-    if (this.promptedAvailableVersion === version) return;
-    this.promptedAvailableVersion = version;
-    const result = await this.showMessageBox({
-      type: "info",
-      title: "发现新版本",
-      message: version ? `ClipPort ${version} 可用` : "ClipPort 有新版本可用",
-      detail: `当前版本 ${this.state.currentVersion}。是否现在下载安装包？下载期间可以继续使用 ClipPort。`,
-      buttons: ["稍后", "下载更新"],
-      defaultId: 1,
-      cancelId: 0,
-      noLink: true,
-    });
-    if (result.response === 1) await this.download();
-  }
-
-  async promptDownloaded(version) {
-    if (this.promptedDownloadedVersion === version) return;
-    this.promptedDownloadedVersion = version;
-    const result = await this.showMessageBox({
-      type: "info",
-      title: "更新已准备好",
-      message: version ? `ClipPort ${version} 已下载` : "ClipPort 更新已下载",
-      detail: "重启后将开始安装；正在进行的下载会暂停，并可在下次启动后继续。",
-      buttons: ["稍后重启", "重启并安装"],
-      defaultId: 1,
-      cancelId: 0,
-      noLink: true,
-    });
-    if (result.response === 1) await this.install();
-  }
 }
 
-module.exports = { UpdateManager };
+module.exports = { DEFAULT_CHECK_INTERVAL_MS, UpdateManager };
