@@ -26,6 +26,7 @@ const { DeviceIdentity } = require("./services/device-identity.cjs");
 const { LicenseManager } = require("./services/license-manager.cjs");
 const { WindowsLicenseStore } = require("./services/windows-license-store.cjs");
 const { DiagnosticLog } = require("./services/diagnostic-log.cjs");
+const { isTrustedClipportOrigin, shouldGrantMediaPermission } = require("./services/media-permissions.cjs");
 const { DEFAULT_ORIGIN, VoiceboxService } = require("./services/voicebox-service.cjs");
 const { VoiceboxRuntimeManager } = require("./services/voicebox-runtime.cjs");
 const { VoiceTaskManager } = require("./services/voice-task-manager.cjs");
@@ -80,35 +81,39 @@ function trustedSender(event) {
   }
 }
 
-function trustedClipportOrigin(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "clipport:" && url.host === "app";
-  } catch {
-    return false;
-  }
-}
-
 function trustedMainContents(webContents) {
-  return Boolean(mainWindow && !mainWindow.isDestroyed() && webContents === mainWindow.webContents && trustedClipportOrigin(webContents.getURL()));
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && webContents === mainWindow.webContents && isTrustedClipportOrigin(webContents.getURL()));
 }
 
 function setupMediaPermissions() {
   session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details = {}) => {
-    if (!trustedMainContents(webContents) || permission !== "media" || !trustedClipportOrigin(requestingOrigin)) return false;
-    return details.isMainFrame !== false && details.mediaType !== "video";
+    return shouldGrantMediaPermission({
+      permission,
+      origin: requestingOrigin,
+      trustedContents: trustedMainContents(webContents),
+      details,
+    });
   });
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
-    const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes : [];
-    const audioOnly = mediaTypes.includes("audio") && !mediaTypes.includes("video");
-    callback(trustedMainContents(webContents) && permission === "media" && trustedClipportOrigin(details.requestingUrl || details.securityOrigin || webContents.getURL()) && audioOnly);
+    const origin = details.requestingUrl || details.securityOrigin || webContents.getURL();
+    const granted = shouldGrantMediaPermission({
+      permission,
+      origin,
+      trustedContents: trustedMainContents(webContents),
+      details,
+      phase: "request",
+    });
+    if (!granted && new Set(["media", "display-capture"]).has(permission)) {
+      diagnosticLog?.warn("security", "已拒绝媒体权限请求", { permission, origin });
+    }
+    callback(granted);
   });
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const trusted = process.platform === "win32"
       && request.userGesture
       && request.audioRequested
       && request.videoRequested
-      && trustedClipportOrigin(request.securityOrigin)
+      && isTrustedClipportOrigin(request.securityOrigin)
       && request.frame
       && request.frame === request.frame.top;
     if (!trusted) {

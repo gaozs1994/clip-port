@@ -276,16 +276,16 @@
             </div>
             <div class="voice-sample-panel voice-capture-panel" id="voiceSampleMicPanel" role="tabpanel" aria-labelledby="voiceSampleMicTab" hidden>
               <span class="voice-sample-icon"><i data-lucide="mic"></i></span>
-              <div><strong id="voiceMicTitle">录制一段清晰的人声</strong><small>建议在安静环境中录制 10 至 30 秒</small></div>
+              <div><strong id="voiceMicTitle">录制一段清晰的人声</strong><small id="voiceMicHint" role="status" aria-live="polite">建议在安静环境中录制 10 至 30 秒</small></div>
               <time class="voice-capture-time" id="voiceMicTime" datetime="PT0S">00:00 / 00:30</time>
-              <button class="secondary-button compact" id="startVoiceMic" type="button"><i data-lucide="circle"></i><span>开始录制</span></button>
+              <button class="secondary-button compact" id="startVoiceMic" type="button" aria-describedby="voiceMicHint voiceProfileError"><i data-lucide="circle"></i><span>开始录制</span></button>
               <button class="secondary-button compact danger" id="stopVoiceMic" type="button" hidden><i data-lucide="square"></i><span>停止</span></button>
             </div>
             <div class="voice-sample-panel voice-capture-panel" id="voiceSampleSystemPanel" role="tabpanel" aria-labelledby="voiceSampleSystemTab" hidden>
               <span class="voice-sample-icon"><i data-lucide="monitor-speaker"></i></span>
-              <div><strong id="voiceSystemTitle">采集本机正在播放的声音</strong><small>先播放目标音频，再开始采集；最长 30 秒</small></div>
+              <div><strong id="voiceSystemTitle">采集本机正在播放的声音</strong><small id="voiceSystemHint" role="status" aria-live="polite">先播放目标音频，再开始采集；最长 30 秒</small></div>
               <time class="voice-capture-time" id="voiceSystemTime" datetime="PT0S">00:00 / 00:30</time>
-              <button class="secondary-button compact" id="startVoiceSystem" type="button"><i data-lucide="circle"></i><span>开始采集</span></button>
+              <button class="secondary-button compact" id="startVoiceSystem" type="button" aria-describedby="voiceSystemHint voiceProfileError"><i data-lucide="circle"></i><span>开始采集</span></button>
               <button class="secondary-button compact danger" id="stopVoiceSystem" type="button" hidden><i data-lucide="square"></i><span>停止</span></button>
             </div>
             <div class="voice-sample-preview" id="voiceSamplePreview" aria-live="polite" hidden>

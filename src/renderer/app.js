@@ -48,6 +48,8 @@
   const VOICE_SAMPLE_MAX_BYTES = 50 * 1024 * 1024;
   const VOICE_CAPTURE_MAX_MS = 30_000;
   const VOICE_SAMPLE_EXTENSIONS = new Set(["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm", "opus"]);
+  const VOICE_MIC_DEFAULT_HINT = "建议在安静环境中录制 10 至 30 秒";
+  const VOICE_SYSTEM_DEFAULT_HINT = "先播放目标音频，再开始采集；最长 30 秒";
   const VOICEBOX_ENGINE_ICONS = {
     qwen: "audio-lines",
     qwen_custom_voice: "message-circle-more",
@@ -117,6 +119,7 @@
   let newVoiceSampleUrl = "";
   let voiceCapture = null;
   let voiceCaptureRequestId = 0;
+  let voiceDeviceStatusRequestId = 0;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -1706,12 +1709,80 @@
     return true;
   }
 
+  function resetVoiceCaptureHints() {
+    $("#voiceMicHint").textContent = VOICE_MIC_DEFAULT_HINT;
+    $("#voiceSystemHint").textContent = VOICE_SYSTEM_DEFAULT_HINT;
+  }
+
+  async function refreshVoiceInputStatus() {
+    const requestId = ++voiceDeviceStatusRequestId;
+    const hint = $("#voiceMicHint");
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      hint.textContent = "无法读取输入设备列表，仍可尝试开始录制";
+      return;
+    }
+    hint.textContent = "正在检测麦克风";
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (requestId !== voiceDeviceStatusRequestId || state.newVoiceSampleMode !== "microphone") return;
+      const inputs = devices.filter((device) => device.kind === "audioinput");
+      const named = inputs.find((device) => device.label)?.label;
+      hint.textContent = inputs.length
+        ? `${named || `已检测到 ${inputs.length} 个输入设备`} · 可开始录制`
+        : "暂未检测到麦克风；连接或启用输入设备后可直接重试";
+    } catch {
+      if (requestId === voiceDeviceStatusRequestId) hint.textContent = "无法读取输入设备列表，仍可尝试开始录制";
+    }
+  }
+
+  function voiceCaptureFailure(error, mode) {
+    const name = String(error?.name || "");
+    const rawMessage = String(error?.message || "");
+    const microphone = mode === "microphone";
+    if (name === "NotFoundError" || name === "DevicesNotFoundError" || /requested device not found|未检测到可用麦克风|未检测到系统音频/i.test(rawMessage)) {
+      return microphone
+        ? {
+            message: "未检测到可用麦克风。请连接或启用输入设备，并在 Windows 设置 > 系统 > 声音 > 输入 中确认设备可用；也可改用系统音频或上传音频。",
+            hint: "未检测到麦克风；请连接或启用输入设备后重试",
+          }
+        : {
+            message: "未检测到可采集的系统音频。请确认 Windows 存在可用的播放设备，并先开始播放音频。",
+            hint: "未检测到播放设备或系统音频",
+          };
+    }
+    if (name === "NotAllowedError" || name === "SecurityError") {
+      return microphone
+        ? {
+            message: "麦克风权限被系统拒绝。请在 Windows 设置 > 隐私和安全性 > 麦克风 中允许桌面应用访问麦克风，然后重试。",
+            hint: "麦克风权限未开启；修改 Windows 隐私设置后重试",
+          }
+        : {
+            message: "系统音频采集未获允许。请重新开始采集；若仍失败，请确认正在使用 Windows 10/11 且播放设备可用。",
+            hint: "系统音频采集未获允许，请重试",
+          };
+    }
+    if (name === "NotReadableError" || name === "TrackStartError") {
+      return {
+        message: microphone ? "麦克风当前无法读取，可能正被其他应用独占。请关闭占用麦克风的应用后重试。" : "系统音频当前无法读取，请确认播放设备未被独占后重试。",
+        hint: microphone ? "麦克风可能正被其他应用占用" : "播放设备可能正被其他应用独占",
+      };
+    }
+    if (name === "OverconstrainedError") {
+      return { message: "当前音频设备不支持所需录制参数，请更换设备或改用上传音频。", hint: "当前设备不支持录制参数" };
+    }
+    return {
+      message: `无法开始${microphone ? "录制" : "系统音频采集"}。请检查设备后重试，或改用上传音频。`,
+      hint: microphone ? "无法启动麦克风，请检查设备后重试" : "无法启动系统音频采集，请重试",
+    };
+  }
+
   function setVoiceSampleMode(mode) {
     const selected = new Set(["upload", "microphone", "system"]).has(mode) ? mode : "upload";
     const previous = state.newVoiceSampleMode;
     if (previous !== selected) {
       voiceCaptureRequestId += 1;
       if (previous !== "upload") resetVoiceCaptureUi(previous);
+      clearVoiceProfileError();
     }
     if (voiceCapture && voiceCapture.mode !== selected) stopVoiceCapture(true);
     state.newVoiceSampleMode = selected;
@@ -1724,6 +1795,7 @@
     $("#voiceSampleUploadPanel").hidden = selected !== "upload";
     $("#voiceSampleMicPanel").hidden = selected !== "microphone";
     $("#voiceSampleSystemPanel").hidden = selected !== "system";
+    if (selected === "microphone") refreshVoiceInputStatus();
   }
 
   function resetVoiceCaptureUi(mode) {
@@ -1786,8 +1858,10 @@
     const requestId = ++voiceCaptureRequestId;
     const microphone = mode === "microphone";
     const start = $(microphone ? "#startVoiceMic" : "#startVoiceSystem");
+    const hint = $(microphone ? "#voiceMicHint" : "#voiceSystemHint");
     start.disabled = true;
     $("span", start).textContent = microphone ? "正在获取麦克风" : "正在连接系统音频";
+    hint.textContent = microphone ? "正在请求麦克风并初始化录制" : "正在连接 Windows 系统音频";
     let sourceStream;
     try {
       sourceStream = microphone
@@ -1800,6 +1874,9 @@
       }
       const audioTracks = sourceStream.getAudioTracks();
       if (!audioTracks.length) throw new Error(microphone ? "未检测到可用麦克风" : "未检测到系统音频，请先播放目标音频后重试");
+      hint.textContent = microphone
+        ? `${audioTracks[0].label || "默认麦克风"} · 正在录制`
+        : "正在采集本机播放声音";
       const recordingStream = new MediaStream(audioTracks);
       const mimeType = preferredRecordingType();
       const recorder = mimeType ? new MediaRecorder(recordingStream, { mimeType }) : new MediaRecorder(recordingStream);
@@ -1819,6 +1896,7 @@
         }
         const extension = type.includes("ogg") ? "ogg" : "webm";
         useVoiceSample(blob, `${prefix}-${Date.now()}.${extension}`, mode);
+        hint.textContent = microphone ? "录制完成，可试听或重新录制" : "采集完成，可试听或重新采集";
       }, { once: true });
       sourceStream.getTracks().forEach((track) => track.addEventListener("ended", () => {
         if (voiceCapture === capture) stopVoiceCapture();
@@ -1834,11 +1912,15 @@
     } catch (error) {
       sourceStream?.getTracks().forEach((track) => track.stop());
       resetVoiceCaptureUi(mode);
-      const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
-      const message = denied
-        ? microphone ? "麦克风访问被拒绝，请在系统设置中允许 ClipPort 使用麦克风" : "系统音频访问被拒绝，请重新开始采集"
-        : error?.message || "无法开始录制，请改用上传音频";
-      setVoiceProfileError(message);
+      const failure = voiceCaptureFailure(error, mode);
+      hint.textContent = failure.hint;
+      recordRendererError("声音采集启动失败", {
+        mode,
+        name: error?.name,
+        message: error?.message,
+        constraint: error?.constraint,
+      });
+      setVoiceProfileError(failure.message);
     }
   }
 
@@ -1869,6 +1951,8 @@
     $("#voiceProfileForm").reset();
     clearVoiceProfileError();
     clearVoiceSample();
+    resetVoiceCaptureHints();
+    voiceDeviceStatusRequestId += 1;
     voiceCaptureRequestId += 1;
     stopVoiceCapture(true);
     setVoiceSampleMode("upload");
