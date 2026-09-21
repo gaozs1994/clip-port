@@ -54,14 +54,13 @@ test("rejects concurrency outside the supported range", () => {
   assert.equal(sanitizeSettingsPatch({ concurrency: 3 }).concurrency, 3);
 });
 
-test("bounds Voicebox generation input and requires voice consent", () => {
+test("bounds Voicebox generation input without requiring a consent flag", () => {
   assert.deepEqual(assertVoiceboxGeneration({
     profileId: "a1111111-1111-4111-8111-111111111111",
     text: "  你好，ClipPort。  ",
     language: "zh",
     instruct: "温和、清晰",
     personality: true,
-    consent: true,
   }), {
     profileId: "a1111111-1111-4111-8111-111111111111",
     text: "你好，ClipPort。",
@@ -69,7 +68,7 @@ test("bounds Voicebox generation input and requires voice consent", () => {
     instruct: "温和、清晰",
     personality: true,
   });
-  assert.throws(() => assertVoiceboxGeneration({ profileId: "valid-profile", text: "hello", consent: false }), { code: "VOICE_CONSENT_REQUIRED" });
-  assert.throws(() => assertVoiceboxGeneration({ profileId: "../profile", text: "hello", consent: true }), { code: "INVALID_VOICE_PROFILE" });
+  assert.equal(assertVoiceboxGeneration({ profileId: "valid-profile", text: "hello" }).text, "hello");
+  assert.throws(() => assertVoiceboxGeneration({ profileId: "../profile", text: "hello" }), { code: "INVALID_VOICE_PROFILE" });
   assert.equal(assertVoiceboxGenerationId("a1111111-1111-4111-8111-111111111111"), "a1111111-1111-4111-8111-111111111111");
 });

@@ -118,7 +118,6 @@ function assertVoiceboxGeneration(input = {}) {
   if (!text || text.length > 10_000) throw new AppError("INVALID_VOICE_TEXT", "语音文案需为 1 到 10000 个字符");
   const language = VOICEBOX_LANGUAGES.has(input.language) ? input.language : "zh";
   const instruct = typeof input.instruct === "string" ? input.instruct.trim().slice(0, 500) : "";
-  if (input.consent !== true) throw new AppError("VOICE_CONSENT_REQUIRED", "请确认你拥有该声音的使用授权");
   return { profileId, text, language, instruct, personality: Boolean(input.personality) };
 }
 

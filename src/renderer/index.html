@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="ClipPort 本地视频解析与下载工具" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>ClipPort</title>
     <link rel="icon" type="image/svg+xml" href="./assets/clipport-icon.svg" />
     <link rel="stylesheet" href="./styles.css" />
@@ -139,7 +139,6 @@
                   </div>
                 </details>
 
-                <label class="check-control voice-consent"><input type="checkbox" id="voiceConsent" /><span class="check-box"><i data-lucide="check"></i></span><span>我确认拥有该声音的使用授权，并同意对生成内容负责</span></label>
                 <p class="form-error" id="voiceError" role="alert" hidden></p>
 
                 <div class="voice-form-actions">
@@ -171,7 +170,7 @@
             </div>
 
             <div class="voice-empty-profiles" id="voiceEmptyProfiles" hidden>
-              <i data-lucide="contact-round"></i><strong>还没有声音档案</strong><span>创建预设音色，或添加一段已获授权的声音样本。</span><button class="primary-button compact" id="createFirstVoiceProfile" type="button"><i data-lucide="plus"></i><span>新建声音档案</span></button>
+              <i data-lucide="contact-round"></i><strong>还没有声音档案</strong><span>创建预设音色，或添加一段声音样本。</span><button class="primary-button compact" id="createFirstVoiceProfile" type="button"><i data-lucide="plus"></i><span>新建声音档案</span></button>
             </div>
           </section>
 
@@ -260,9 +259,44 @@
         </div>
         <label class="control-field" for="newVoiceDescription"><span>用途说明（可选）</span><input id="newVoiceDescription" maxlength="500" placeholder="例如：适合短视频解说"></label>
         <div class="voice-clone-fields" id="voiceCloneFields" hidden>
-          <label class="control-field" for="newVoiceReference"><span>样本中的原文</span><textarea id="newVoiceReference" rows="3" maxlength="1000" placeholder="准确填写声音样本中说出的内容"></textarea></label>
-          <p><i data-lucide="file-audio"></i>创建时选择不超过 50 MB 的 WAV、MP3、M4A、FLAC 或 OGG 音频。</p>
-          <label class="check-control"><input type="checkbox" id="newVoiceConsent"><span class="check-box"><i data-lucide="check"></i></span><span>我确认已取得该声音样本的使用授权</span></label>
+          <fieldset class="voice-sample-fieldset" aria-describedby="voiceProfileError">
+            <legend>声音样本</legend>
+            <div class="voice-sample-tabs" role="tablist" aria-label="声音样本来源">
+              <button class="active" id="voiceSampleUploadTab" type="button" role="tab" aria-selected="true" aria-controls="voiceSampleUploadPanel" data-voice-sample-mode="upload"><i data-lucide="upload"></i><span>上传音频</span></button>
+              <button id="voiceSampleMicTab" type="button" role="tab" aria-selected="false" aria-controls="voiceSampleMicPanel" data-voice-sample-mode="microphone"><i data-lucide="mic"></i><span>录制声音</span></button>
+              <button id="voiceSampleSystemTab" type="button" role="tab" aria-selected="false" aria-controls="voiceSampleSystemPanel" data-voice-sample-mode="system"><i data-lucide="monitor-speaker"></i><span>系统音频</span></button>
+            </div>
+            <div class="voice-sample-panel" id="voiceSampleUploadPanel" role="tabpanel" aria-labelledby="voiceSampleUploadTab">
+              <input id="newVoiceSampleFile" type="file" accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.opus,audio/*" hidden>
+              <div class="voice-upload-zone" id="voiceUploadZone">
+                <span class="voice-sample-icon"><i data-lucide="file-audio"></i></span>
+                <div><strong>选择或拖入音频文件</strong><small>WAV、MP3、M4A、FLAC、OGG、AAC、WebM，最大 50 MB</small></div>
+                <button class="secondary-button compact" id="chooseVoiceSample" type="button"><i data-lucide="folder-open"></i><span>选择文件</span></button>
+              </div>
+            </div>
+            <div class="voice-sample-panel voice-capture-panel" id="voiceSampleMicPanel" role="tabpanel" aria-labelledby="voiceSampleMicTab" hidden>
+              <span class="voice-sample-icon"><i data-lucide="mic"></i></span>
+              <div><strong id="voiceMicTitle">录制一段清晰的人声</strong><small>建议在安静环境中录制 10 至 30 秒</small></div>
+              <time class="voice-capture-time" id="voiceMicTime" datetime="PT0S">00:00 / 00:30</time>
+              <button class="secondary-button compact" id="startVoiceMic" type="button"><i data-lucide="circle"></i><span>开始录制</span></button>
+              <button class="secondary-button compact danger" id="stopVoiceMic" type="button" hidden><i data-lucide="square"></i><span>停止</span></button>
+            </div>
+            <div class="voice-sample-panel voice-capture-panel" id="voiceSampleSystemPanel" role="tabpanel" aria-labelledby="voiceSampleSystemTab" hidden>
+              <span class="voice-sample-icon"><i data-lucide="monitor-speaker"></i></span>
+              <div><strong id="voiceSystemTitle">采集本机正在播放的声音</strong><small>先播放目标音频，再开始采集；最长 30 秒</small></div>
+              <time class="voice-capture-time" id="voiceSystemTime" datetime="PT0S">00:00 / 00:30</time>
+              <button class="secondary-button compact" id="startVoiceSystem" type="button"><i data-lucide="circle"></i><span>开始采集</span></button>
+              <button class="secondary-button compact danger" id="stopVoiceSystem" type="button" hidden><i data-lucide="square"></i><span>停止</span></button>
+            </div>
+            <div class="voice-sample-preview" id="voiceSamplePreview" aria-live="polite" hidden>
+              <span class="voice-sample-icon success"><i data-lucide="audio-lines"></i></span>
+              <div class="voice-sample-preview-copy"><strong id="voiceSampleName">声音样本</strong><small id="voiceSampleMeta">--</small></div>
+              <button class="icon-button bordered danger" id="removeVoiceSample" type="button" aria-label="移除声音样本" title="移除声音样本"><i data-lucide="trash-2"></i></button>
+              <audio id="voiceSamplePlayer" controls preload="metadata" aria-label="试听声音样本"></audio>
+            </div>
+          </fieldset>
+          <label class="control-field" for="newVoiceReference"><span>样本中的原文</span><textarea id="newVoiceReference" rows="3" maxlength="1000" aria-describedby="newVoiceReferenceHint" placeholder="准确填写声音样本中说出的内容"></textarea></label>
+          <p class="field-hint" id="newVoiceReferenceHint"><i data-lucide="text-quote"></i>原文应与样本逐字一致，可显著改善克隆效果。</p>
         </div>
         <p class="form-error" id="voiceProfileError" role="alert" hidden></p>
         <div class="dialog-actions"><button class="secondary-button" id="cancelVoiceProfile" type="button">取消</button><button class="primary-button" id="submitVoiceProfile" type="submit"><i data-lucide="plus"></i><span>创建档案</span></button></div>

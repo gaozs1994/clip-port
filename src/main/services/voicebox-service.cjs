@@ -1,10 +1,19 @@
-const fs = require("node:fs");
 const path = require("node:path");
 const { AppError, assertVoiceboxGeneration, assertVoiceboxGenerationId } = require("./validators.cjs");
 
 const DEFAULT_ORIGIN = "http://127.0.0.1:17493";
 const MAX_AUDIO_BYTES = 300 * 1024 * 1024;
 const MAX_SAMPLE_BYTES = 50 * 1024 * 1024;
+const SAMPLE_MIME_TYPES = {
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
+  ".webm": "audio/webm",
+  ".opus": "audio/ogg",
+};
 const VOICE_TYPES = new Set(["cloned", "preset", "designed"]);
 const VOICE_ENGINES = new Set(["qwen", "qwen_custom_voice", "luxtts", "chatterbox", "chatterbox_turbo", "tada", "kokoro"]);
 const VOICE_LANGUAGES = new Set(["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it", "he", "ar", "da", "el", "fi", "hi", "ms", "nl", "no", "pl", "sv", "sw", "tr"]);
@@ -87,8 +96,23 @@ function assertProfileInput(input = {}) {
   if (voiceType === "preset" && (!voiceId || voiceId.length > 100)) throw new AppError("INVALID_VOICE_PROFILE", "请选择预设音色");
   const description = typeof input.description === "string" ? input.description.trim().slice(0, 500) : "";
   const personality = typeof input.personality === "string" ? input.personality.trim().slice(0, 2000) : "";
-  if (voiceType === "cloned" && input.consent !== true) throw new AppError("VOICE_CONSENT_REQUIRED", "请确认已取得声音样本的使用授权");
   return { name, voiceType, language, engine, voiceId, description, personality };
+}
+
+function assertSampleInput(input = {}) {
+  const rawName = typeof input.name === "string" ? input.name.trim() : "";
+  const fileName = path.basename(rawName.replaceAll("\\", "/")).slice(0, 255);
+  const extension = path.extname(fileName).toLowerCase();
+  const mimeType = SAMPLE_MIME_TYPES[extension];
+  if (!fileName || !mimeType) throw new AppError("INVALID_VOICE_SAMPLE", "声音样本格式不受支持");
+  const bytes = input.bytes;
+  let buffer;
+  if (Buffer.isBuffer(bytes)) buffer = bytes;
+  else if (ArrayBuffer.isView(bytes)) buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  else if (bytes instanceof ArrayBuffer) buffer = Buffer.from(bytes);
+  else throw new AppError("INVALID_VOICE_SAMPLE", "声音样本数据无效");
+  if (buffer.length <= 0 || buffer.length > MAX_SAMPLE_BYTES) throw new AppError("INVALID_VOICE_SAMPLE", "声音样本必须是不超过 50 MB 的音频文件");
+  return { buffer, fileName, mimeType };
 }
 
 function sanitizeProfile(profile = {}) {
@@ -275,18 +299,14 @@ class VoiceboxService {
     return true;
   }
 
-  async addProfileSample(value, filePath, referenceText) {
+  async addProfileSampleData(value, input, referenceText) {
     const profileId = typeof value === "string" ? value.trim() : "";
     if (!/^[a-z0-9-]{1,100}$/i.test(profileId)) throw new AppError("INVALID_VOICE_PROFILE", "声音档案标识无效");
     const transcript = typeof referenceText === "string" ? referenceText.trim() : "";
     if (!transcript || transcript.length > 1000) throw new AppError("INVALID_VOICE_SAMPLE", "样本原文需为 1 到 1000 个字符");
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_SAMPLE_BYTES) throw new AppError("INVALID_VOICE_SAMPLE", "声音样本必须是不超过 50 MB 的音频文件");
-    const extension = path.extname(filePath).toLowerCase();
-    const mimeTypes = { ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".flac": "audio/flac", ".aac": "audio/aac", ".webm": "audio/webm", ".opus": "audio/ogg" };
-    if (!mimeTypes[extension]) throw new AppError("INVALID_VOICE_SAMPLE", "声音样本格式不受支持");
+    const sample = assertSampleInput(input);
     const form = new FormData();
-    form.append("file", new Blob([fs.readFileSync(filePath)], { type: mimeTypes[extension] }), path.basename(filePath));
+    form.append("file", new Blob([sample.buffer], { type: sample.mimeType }), sample.fileName);
     form.append("reference_text", transcript);
     return this.#json(`/profiles/${encodeURIComponent(profileId)}/samples`, { method: "POST", body: form }, 60_000);
   }
@@ -510,4 +530,4 @@ class VoiceboxService {
   }
 }
 
-module.exports = { DEFAULT_ORIGIN, VOICEBOX_TTS_MODELS, VoiceboxService, assertProfileInput, mergeVoiceModels, parseSseEvents, sanitizeModel, sanitizeProfile };
+module.exports = { DEFAULT_ORIGIN, VOICEBOX_TTS_MODELS, VoiceboxService, assertProfileInput, assertSampleInput, mergeVoiceModels, parseSseEvents, sanitizeModel, sanitizeProfile };

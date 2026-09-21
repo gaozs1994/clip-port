@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { VOICEBOX_TTS_MODELS, VoiceboxService, mergeVoiceModels, parseSseEvents } = require("../src/main/services/voicebox-service.cjs");
+const { VOICEBOX_TTS_MODELS, VoiceboxService, assertProfileInput, assertSampleInput, mergeVoiceModels, parseSseEvents } = require("../src/main/services/voicebox-service.cjs");
 
 function json(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -67,6 +67,33 @@ test("keeps every Voicebox TTS model visible while merging live download state",
   assert.equal(models.find((model) => model.name === "qwen-tts-0.6B").downloaded, false);
 });
 
+test("accepts cloned profiles and validates renderer-provided audio samples", () => {
+  assert.equal(assertProfileInput({ name: "旁白", voiceType: "cloned", language: "zh", engine: "qwen" }).voiceType, "cloned");
+  const sample = assertSampleInput({ name: "sample.webm", bytes: new Uint8Array([1, 2, 3]) });
+  assert.equal(sample.fileName, "sample.webm");
+  assert.equal(sample.mimeType, "audio/webm");
+  assert.deepEqual([...sample.buffer], [1, 2, 3]);
+  assert.throws(() => assertSampleInput({ name: "sample.exe", bytes: new Uint8Array([1]) }), { code: "INVALID_VOICE_SAMPLE" });
+  assert.throws(() => assertSampleInput({ name: "sample.wav", bytes: new Uint8Array() }), { code: "INVALID_VOICE_SAMPLE" });
+});
+
+test("uploads an in-memory profile sample with its reference text", async () => {
+  let posted = null;
+  const service = new VoiceboxService({
+    fetchImpl: async (url, options = {}) => {
+      posted = { pathname: new URL(url).pathname, body: options.body };
+      return json({ id: "sample-1" });
+    },
+  });
+  await service.addProfileSampleData("profile-1", { name: "voice.webm", bytes: new Uint8Array([1, 2, 3, 4]) }, "你好，ClipPort");
+  assert.equal(posted.pathname, "/profiles/profile-1/samples");
+  assert.equal(posted.body.get("reference_text"), "你好，ClipPort");
+  const file = posted.body.get("file");
+  assert.equal(file.name, "voice.webm");
+  assert.equal(file.type, "audio/webm");
+  assert.deepEqual([...new Uint8Array(await file.arrayBuffer())], [1, 2, 3, 4]);
+});
+
 test("uses a preset profile engine even when Voicebox also returns a conflicting default engine", async () => {
   const generationId = "a1111111-1111-4111-8111-111111111111";
   let generationPayload = null;
@@ -88,7 +115,7 @@ test("uses a preset profile engine even when Voicebox also returns a conflicting
     onModelProgress: resolveProgress,
   });
   await service.getStatus();
-  await service.startGeneration({ profileId: "profile-1", text: "你好", language: "zh", consent: true });
+  await service.startGeneration({ profileId: "profile-1", text: "你好", language: "zh" });
   assert.equal(generationPayload.engine, "kokoro");
   await service.downloadModel("kokoro");
   const progress = await progressEvent;
@@ -118,7 +145,7 @@ test("starts an async Voicebox generation and emits a playable completion", asyn
       if (status.status === "completed") resolveCompleted(status);
     },
   });
-  const started = await service.startGeneration({ profileId: "profile-1", text: "Hello", language: "en", consent: true });
+  const started = await service.startGeneration({ profileId: "profile-1", text: "Hello", language: "en" });
   const result = await completed;
   assert.equal(started.id, id);
   assert.equal(result.status, "completed");

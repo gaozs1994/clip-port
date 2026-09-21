@@ -5,6 +5,7 @@ const {
   app,
   BrowserWindow,
   clipboard,
+  desktopCapturer,
   dialog,
   ipcMain,
   net,
@@ -77,6 +78,52 @@ function trustedSender(event) {
   } catch {
     return false;
   }
+}
+
+function trustedClipportOrigin(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "clipport:" && url.host === "app";
+  } catch {
+    return false;
+  }
+}
+
+function trustedMainContents(webContents) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && webContents === mainWindow.webContents && trustedClipportOrigin(webContents.getURL()));
+}
+
+function setupMediaPermissions() {
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details = {}) => {
+    if (!trustedMainContents(webContents) || permission !== "media" || !trustedClipportOrigin(requestingOrigin)) return false;
+    return details.isMainFrame !== false && details.mediaType !== "video";
+  });
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
+    const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes : [];
+    const audioOnly = mediaTypes.includes("audio") && !mediaTypes.includes("video");
+    callback(trustedMainContents(webContents) && permission === "media" && trustedClipportOrigin(details.requestingUrl || details.securityOrigin || webContents.getURL()) && audioOnly);
+  });
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const trusted = process.platform === "win32"
+      && request.userGesture
+      && request.audioRequested
+      && request.videoRequested
+      && trustedClipportOrigin(request.securityOrigin)
+      && request.frame
+      && request.frame === request.frame.top;
+    if (!trusted) {
+      callback({});
+      return;
+    }
+    try {
+      const sources = await desktopCapturer.getSources({ types: ["screen"] });
+      if (!sources[0]) throw new Error("没有可用屏幕");
+      callback({ video: sources[0], audio: "loopback" });
+    } catch (error) {
+      diagnosticLog?.warn("voicebox", "无法获取系统音频采集源", { error: error?.message || String(error) });
+      callback({});
+    }
+  });
 }
 
 function logSource(channel) {
@@ -327,19 +374,10 @@ function registerIpc() {
   handle("voicebox:preset-voices", ({ engine }) => voiceboxService.listPresetVoices(engine));
   handle("voicebox:create-profile", async (payload) => {
     licenseManager.requireActive();
-    let samplePath = "";
-    if (payload.voiceType === "cloned") {
-      const result = await dialog.showOpenDialog(mainWindow, {
-        title: "选择已获授权的声音样本",
-        properties: ["openFile"],
-        filters: [{ name: "音频文件", extensions: ["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm", "opus"] }],
-      });
-      if (result.canceled || !result.filePaths[0]) return null;
-      samplePath = result.filePaths[0];
-    }
+    if (payload.voiceType === "cloned" && !payload.sample) throw new AppError("INVALID_VOICE_SAMPLE", "请添加声音样本");
     const profile = await voiceboxService.createProfile(payload);
     try {
-      if (samplePath) await voiceboxService.addProfileSample(profile.id, samplePath, payload.referenceText);
+      if (payload.voiceType === "cloned") await voiceboxService.addProfileSampleData(profile.id, payload.sample, payload.referenceText);
     } catch (error) {
       await voiceboxService.deleteProfile(profile.id).catch(() => {});
       throw error;
@@ -483,7 +521,7 @@ function registerIpc() {
 async function initialize() {
   if (process.platform === "win32") app.setAppUserModelId("app.clipport.desktop");
   setupProtocol();
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  setupMediaPermissions();
   diagnosticLog = new DiagnosticLog({
     userDataPath: app.getPath("userData"),
     onEntry: (entry) => send("logs:changed", entry),

@@ -45,6 +45,9 @@
     he: "希伯来语", ar: "阿拉伯语", da: "丹麦语", el: "希腊语", fi: "芬兰语", hi: "印地语", ms: "马来语", nl: "荷兰语", no: "挪威语", pl: "波兰语", sv: "瑞典语", sw: "斯瓦希里语", tr: "土耳其语",
   };
   const VOICEBOX_ENGINE_ORDER = ["qwen", "qwen_custom_voice", "luxtts", "chatterbox", "chatterbox_turbo", "tada", "kokoro"];
+  const VOICE_SAMPLE_MAX_BYTES = 50 * 1024 * 1024;
+  const VOICE_CAPTURE_MAX_MS = 30_000;
+  const VOICE_SAMPLE_EXTENSIONS = new Set(["wav", "mp3", "m4a", "ogg", "flac", "aac", "webm", "opus"]);
   const VOICEBOX_ENGINE_ICONS = {
     qwen: "audio-lines",
     qwen_custom_voice: "message-circle-more",
@@ -101,6 +104,7 @@
     voiceboxGeneration: null,
     voiceboxModelProgress: {},
     newVoiceProfileType: "preset",
+    newVoiceSampleMode: "upload",
     updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "启动后自动检查更新" },
     licenseStatus: { status: "unlicensed", active: false, hasLicense: false, deviceCode: "", message: "正在读取设备授权状态" },
     preset: "recommended",
@@ -109,6 +113,10 @@
     diagnosticLogs: [],
     logAutoScroll: true,
   };
+  let newVoiceSample = null;
+  let newVoiceSampleUrl = "";
+  let voiceCapture = null;
+  let voiceCaptureRequestId = 0;
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -186,7 +194,7 @@
       models: structuredClone(DEMO_VOICEBOX_MODELS),
       profiles: [
         { id: "a1111111-1111-4111-8111-111111111111", name: "叙事女声", description: "清晰、自然，适合视频旁白", language: "zh", voiceType: "preset", engine: "qwen_custom_voice", hasPersonality: true, sampleCount: 0, generationCount: 18 },
-        { id: "b2222222-2222-4222-8222-222222222222", name: "我的声音", description: "已授权的本地克隆档案", language: "zh", voiceType: "cloned", engine: "qwen", hasPersonality: false, sampleCount: 2, generationCount: 7 },
+        { id: "b2222222-2222-4222-8222-222222222222", name: "我的声音", description: "本地克隆档案", language: "zh", voiceType: "cloned", engine: "qwen", hasPersonality: false, sampleCount: 2, generationCount: 7 },
       ],
     };
     let timer = null;
@@ -1626,6 +1634,214 @@
     }
   }
 
+  function setVoiceProfileError(message, focusTarget) {
+    const errorNode = $("#voiceProfileError");
+    errorNode.textContent = message;
+    errorNode.hidden = false;
+    if (focusTarget) {
+      focusTarget.setAttribute("aria-invalid", "true");
+      focusTarget.focus();
+    }
+  }
+
+  function clearVoiceProfileError() {
+    $("#voiceProfileError").hidden = true;
+    $$("#voiceProfileForm [aria-invalid='true']").forEach((node) => node.removeAttribute("aria-invalid"));
+  }
+
+  function supportedVoiceSampleName(name) {
+    const extension = String(name || "").split(".").pop()?.toLowerCase();
+    return Boolean(extension && VOICE_SAMPLE_EXTENSIONS.has(extension));
+  }
+
+  function voiceSampleSourceLabel(source) {
+    return { upload: "上传文件", microphone: "麦克风录制", system: "系统音频" }[source] || "声音样本";
+  }
+
+  function renderVoiceSample() {
+    const preview = $("#voiceSamplePreview");
+    preview.hidden = !newVoiceSample;
+    if (!newVoiceSample) {
+      $("#voiceSamplePlayer").removeAttribute("src");
+      return;
+    }
+    $("#voiceSampleName").textContent = newVoiceSample.name;
+    $("#voiceSampleMeta").textContent = `${voiceSampleSourceLabel(newVoiceSample.source)} · ${formatBytes(newVoiceSample.blob.size)}`;
+    const player = $("#voiceSamplePlayer");
+    const sample = newVoiceSample;
+    player.src = newVoiceSampleUrl;
+    player.onloadedmetadata = () => {
+      if (newVoiceSample !== sample) return;
+      const duration = Number.isFinite(player.duration) ? ` · ${formatDuration(player.duration)}` : "";
+      $("#voiceSampleMeta").textContent = `${voiceSampleSourceLabel(sample.source)} · ${formatBytes(sample.blob.size)}${duration}`;
+    };
+  }
+
+  function clearVoiceSample() {
+    if (newVoiceSampleUrl) URL.revokeObjectURL(newVoiceSampleUrl);
+    newVoiceSampleUrl = "";
+    newVoiceSample = null;
+    $("#newVoiceSampleFile").value = "";
+    renderVoiceSample();
+  }
+
+  function useVoiceSample(blob, name, source) {
+    clearVoiceProfileError();
+    if (!(blob instanceof Blob) || blob.size <= 0) {
+      setVoiceProfileError("声音样本为空，请重新选择或录制");
+      return false;
+    }
+    if (blob.size > VOICE_SAMPLE_MAX_BYTES) {
+      setVoiceProfileError("声音样本不能超过 50 MB");
+      return false;
+    }
+    if (!supportedVoiceSampleName(name)) {
+      setVoiceProfileError("请选择 WAV、MP3、M4A、FLAC、OGG、AAC、WebM 或 Opus 音频");
+      return false;
+    }
+    clearVoiceSample();
+    newVoiceSample = { blob, name, type: blob.type || "application/octet-stream", source };
+    newVoiceSampleUrl = URL.createObjectURL(blob);
+    renderVoiceSample();
+    return true;
+  }
+
+  function setVoiceSampleMode(mode) {
+    const selected = new Set(["upload", "microphone", "system"]).has(mode) ? mode : "upload";
+    const previous = state.newVoiceSampleMode;
+    if (previous !== selected) {
+      voiceCaptureRequestId += 1;
+      if (previous !== "upload") resetVoiceCaptureUi(previous);
+    }
+    if (voiceCapture && voiceCapture.mode !== selected) stopVoiceCapture(true);
+    state.newVoiceSampleMode = selected;
+    $$("[data-voice-sample-mode]").forEach((button) => {
+      const active = button.dataset.voiceSampleMode === selected;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    $("#voiceSampleUploadPanel").hidden = selected !== "upload";
+    $("#voiceSampleMicPanel").hidden = selected !== "microphone";
+    $("#voiceSampleSystemPanel").hidden = selected !== "system";
+  }
+
+  function resetVoiceCaptureUi(mode) {
+    const microphone = mode === "microphone";
+    const panel = $(microphone ? "#voiceSampleMicPanel" : "#voiceSampleSystemPanel");
+    const start = $(microphone ? "#startVoiceMic" : "#startVoiceSystem");
+    const stop = $(microphone ? "#stopVoiceMic" : "#stopVoiceSystem");
+    const time = $(microphone ? "#voiceMicTime" : "#voiceSystemTime");
+    panel.classList.remove("recording");
+    start.hidden = false;
+    start.disabled = false;
+    $("span", start).textContent = microphone ? "开始录制" : "开始采集";
+    stop.hidden = true;
+    stop.disabled = false;
+    time.textContent = "00:00 / 00:30";
+    time.dateTime = "PT0S";
+  }
+
+  function cleanupVoiceCapture(capture) {
+    clearInterval(capture.timerId);
+    if (voiceCapture === capture) voiceCapture = null;
+    capture.sourceStream?.getTracks().forEach((track) => track.stop());
+    resetVoiceCaptureUi(capture.mode);
+  }
+
+  function stopVoiceCapture(discard = false) {
+    const capture = voiceCapture;
+    if (!capture) return;
+    capture.discard ||= discard;
+    if (capture.recorder.state !== "inactive") capture.recorder.stop();
+    else cleanupVoiceCapture(capture);
+  }
+
+  function updateVoiceCaptureTime(capture) {
+    const elapsed = Math.min(VOICE_CAPTURE_MAX_MS, Date.now() - capture.startedAt);
+    const seconds = Math.floor(elapsed / 1000);
+    const time = $(capture.mode === "microphone" ? "#voiceMicTime" : "#voiceSystemTime");
+    time.textContent = `00:${String(seconds).padStart(2, "0")} / 00:30`;
+    time.dateTime = `PT${seconds}S`;
+    if (elapsed >= VOICE_CAPTURE_MAX_MS) stopVoiceCapture();
+  }
+
+  function preferredRecordingType() {
+    if (typeof MediaRecorder.isTypeSupported !== "function") return "";
+    return ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  async function startVoiceCapture(mode) {
+    clearVoiceProfileError();
+    if (!navigator.mediaDevices || typeof MediaRecorder === "undefined") {
+      setVoiceProfileError("当前环境不支持音频录制，请改用上传音频");
+      return;
+    }
+    const captureMethod = mode === "microphone" ? navigator.mediaDevices.getUserMedia : navigator.mediaDevices.getDisplayMedia;
+    if (typeof captureMethod !== "function") {
+      setVoiceProfileError(mode === "microphone" ? "当前环境无法访问麦克风，请改用上传音频" : "当前环境不支持系统音频采集，请改用上传音频");
+      return;
+    }
+    stopVoiceCapture(true);
+    const requestId = ++voiceCaptureRequestId;
+    const microphone = mode === "microphone";
+    const start = $(microphone ? "#startVoiceMic" : "#startVoiceSystem");
+    start.disabled = true;
+    $("span", start).textContent = microphone ? "正在获取麦克风" : "正在连接系统音频";
+    let sourceStream;
+    try {
+      sourceStream = microphone
+        ? await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false })
+        : await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+      if (requestId !== voiceCaptureRequestId || !$("#voiceProfileDialog").open) {
+        sourceStream.getTracks().forEach((track) => track.stop());
+        resetVoiceCaptureUi(mode);
+        return;
+      }
+      const audioTracks = sourceStream.getAudioTracks();
+      if (!audioTracks.length) throw new Error(microphone ? "未检测到可用麦克风" : "未检测到系统音频，请先播放目标音频后重试");
+      const recordingStream = new MediaStream(audioTracks);
+      const mimeType = preferredRecordingType();
+      const recorder = mimeType ? new MediaRecorder(recordingStream, { mimeType }) : new MediaRecorder(recordingStream);
+      const capture = { mode, recorder, sourceStream, chunks: [], discard: false, startedAt: Date.now(), timerId: 0 };
+      voiceCapture = capture;
+      recorder.addEventListener("dataavailable", (event) => { if (event.data.size) capture.chunks.push(event.data); });
+      recorder.addEventListener("stop", () => {
+        const durationMs = Date.now() - capture.startedAt;
+        cleanupVoiceCapture(capture);
+        if (capture.discard) return;
+        const type = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(capture.chunks, { type });
+        const prefix = mode === "microphone" ? "microphone" : "system-audio";
+        if (durationMs < 500 || !blob.size) {
+          setVoiceProfileError("录音时间过短，请至少录制 1 秒");
+          return;
+        }
+        const extension = type.includes("ogg") ? "ogg" : "webm";
+        useVoiceSample(blob, `${prefix}-${Date.now()}.${extension}`, mode);
+      }, { once: true });
+      sourceStream.getTracks().forEach((track) => track.addEventListener("ended", () => {
+        if (voiceCapture === capture) stopVoiceCapture();
+      }, { once: true }));
+      const panel = $(microphone ? "#voiceSampleMicPanel" : "#voiceSampleSystemPanel");
+      panel.classList.add("recording");
+      start.hidden = true;
+      const stop = $(microphone ? "#stopVoiceMic" : "#stopVoiceSystem");
+      stop.hidden = false;
+      recorder.start(1000);
+      updateVoiceCaptureTime(capture);
+      capture.timerId = setInterval(() => updateVoiceCaptureTime(capture), 250);
+    } catch (error) {
+      sourceStream?.getTracks().forEach((track) => track.stop());
+      resetVoiceCaptureUi(mode);
+      const denied = error?.name === "NotAllowedError" || error?.name === "SecurityError";
+      const message = denied
+        ? microphone ? "麦克风访问被拒绝，请在系统设置中允许 ClipPort 使用麦克风" : "系统音频访问被拒绝，请重新开始采集"
+        : error?.message || "无法开始录制，请改用上传音频";
+      setVoiceProfileError(message);
+    }
+  }
+
   function selectNewVoiceProfileType(type) {
     state.newVoiceProfileType = type === "cloned" ? "cloned" : "preset";
     $$('[data-voice-profile-type]').forEach((button) => {
@@ -1636,6 +1852,12 @@
     const preset = state.newVoiceProfileType === "preset";
     $("#presetVoiceField").hidden = !preset;
     $("#voiceCloneFields").hidden = preset;
+    if (preset) {
+      voiceCaptureRequestId += 1;
+      stopVoiceCapture(true);
+      resetVoiceCaptureUi("microphone");
+      resetVoiceCaptureUi("system");
+    }
     const engines = preset
       ? [["kokoro", "Kokoro"], ["qwen_custom_voice", "Qwen CustomVoice"]]
       : [["qwen", "Qwen3-TTS"], ["luxtts", "LuxTTS"], ["chatterbox", "Chatterbox Multilingual"], ["chatterbox_turbo", "Chatterbox Turbo"], ["tada", "HumeAI TADA"]];
@@ -1645,20 +1867,27 @@
 
   function openVoiceProfileDialog() {
     $("#voiceProfileForm").reset();
-    $("#voiceProfileError").hidden = true;
+    clearVoiceProfileError();
+    clearVoiceSample();
+    voiceCaptureRequestId += 1;
+    stopVoiceCapture(true);
+    setVoiceSampleMode("upload");
     selectNewVoiceProfileType("preset");
     $("#voiceProfileDialog").showModal();
     requestAnimationFrame(() => $("#newVoiceName").focus());
   }
 
   function closeVoiceProfileDialog() {
-    $("#voiceProfileDialog").close();
+    voiceCaptureRequestId += 1;
+    stopVoiceCapture(true);
+    clearVoiceSample();
+    if ($("#voiceProfileDialog").open) $("#voiceProfileDialog").close();
   }
 
   async function createVoiceProfile(event) {
     event.preventDefault();
     const errorNode = $("#voiceProfileError");
-    errorNode.hidden = true;
+    clearVoiceProfileError();
     const payload = {
       name: $("#newVoiceName").value.trim(),
       description: $("#newVoiceDescription").value.trim(),
@@ -1667,30 +1896,31 @@
       engine: $("#newVoiceEngine").value,
       voiceId: state.newVoiceProfileType === "preset" ? $("#newPresetVoice").value : "",
       referenceText: state.newVoiceProfileType === "cloned" ? $("#newVoiceReference").value.trim() : "",
-      consent: state.newVoiceProfileType !== "cloned" || $("#newVoiceConsent").checked,
     };
     if (!payload.name) {
-      errorNode.textContent = "请输入档案名称";
-      errorNode.hidden = false;
-      $("#newVoiceName").focus();
+      setVoiceProfileError("请输入档案名称", $("#newVoiceName"));
+      return;
+    }
+    if (payload.voiceType === "cloned" && !newVoiceSample) {
+      setVoiceProfileError("请上传、录制或采集一段声音样本", $("[data-voice-sample-mode].active"));
       return;
     }
     if (payload.voiceType === "cloned" && !payload.referenceText) {
-      errorNode.textContent = "请准确填写声音样本中的原文";
-      errorNode.hidden = false;
-      $("#newVoiceReference").focus();
-      return;
-    }
-    if (payload.voiceType === "cloned" && !$("#newVoiceConsent").checked) {
-      errorNode.textContent = "请确认已取得声音样本的使用授权";
-      errorNode.hidden = false;
-      $("#newVoiceConsent").focus();
+      setVoiceProfileError("请准确填写声音样本中的原文", $("#newVoiceReference"));
       return;
     }
     const button = $("#submitVoiceProfile");
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
+    $("span", button).textContent = "正在创建";
     try {
+      if (payload.voiceType === "cloned") {
+        payload.sample = {
+          name: newVoiceSample.name,
+          type: newVoiceSample.type,
+          bytes: new Uint8Array(await newVoiceSample.blob.arrayBuffer()),
+        };
+      }
       const status = await call(api.voicebox.createProfile(payload));
       if (!status) return;
       state.voiceboxStatus = status;
@@ -1704,6 +1934,7 @@
     } finally {
       button.disabled = false;
       button.removeAttribute("aria-busy");
+      $("span", button).textContent = "创建档案";
     }
   }
 
@@ -1783,11 +2014,9 @@
     event?.preventDefault();
     const profile = selectedVoiceProfile();
     const text = $("#voiceText").value.trim();
-    const consent = $("#voiceConsent").checked;
     const errorNode = $("#voiceError");
     errorNode.hidden = true;
     $("#voiceText").removeAttribute("aria-invalid");
-    $("#voiceConsent").removeAttribute("aria-invalid");
     if (!profile) {
       errorNode.textContent = "请先在 Voicebox 中创建声音档案";
       errorNode.hidden = false;
@@ -1800,13 +2029,6 @@
       $("#voiceText").focus();
       return;
     }
-    if (!consent) {
-      errorNode.textContent = "请确认你拥有该声音的使用授权";
-      errorNode.hidden = false;
-      $("#voiceConsent").setAttribute("aria-invalid", "true");
-      $("#voiceConsent").focus();
-      return;
-    }
     $("#generateVoice").disabled = true;
     try {
       state.voiceboxGeneration = await call(api.voicebox.generate({
@@ -1815,7 +2037,6 @@
         language: $("#voiceLanguage").value,
         instruct: $("#voiceInstruct").value.trim(),
         personality: $("#voicePersonality").checked,
-        consent,
       }));
       renderVoiceboxGeneration();
       showToast("语音任务已提交", "Voicebox 正在本机生成音频");
@@ -1906,10 +2127,12 @@
       if (voiceModelAction) handleVoiceModelAction(voiceModelAction);
       const voiceProfileType = event.target.closest("[data-voice-profile-type]");
       if (voiceProfileType) selectNewVoiceProfileType(voiceProfileType.dataset.voiceProfileType);
+      const voiceSampleMode = event.target.closest("[data-voice-sample-mode]");
+      if (voiceSampleMode) setVoiceSampleMode(voiceSampleMode.dataset.voiceSampleMode);
     });
     document.addEventListener("keydown", (event) => {
       if (!new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]).has(event.key)) return;
-      const groups = ["[data-preset]", "[data-option-tab]", "[data-task-filter]"];
+      const groups = ["[data-preset]", "[data-option-tab]", "[data-task-filter]", "[data-voice-profile-type]", "[data-voice-sample-mode]"];
       const selector = groups.find((value) => event.target.matches(value));
       if (!selector) return;
       const buttons = $$(selector).filter((button) => !button.disabled && !button.hidden);
@@ -1941,13 +2164,45 @@
     $("#cancelVoiceProfile").addEventListener("click", closeVoiceProfileDialog);
     $("#newVoiceEngine").addEventListener("change", loadPresetVoices);
     $("#voiceProfileDialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeVoiceProfileDialog(); });
+    $("#voiceProfileDialog").addEventListener("close", () => {
+      voiceCaptureRequestId += 1;
+      stopVoiceCapture(true);
+      clearVoiceSample();
+    });
+    $("#chooseVoiceSample").addEventListener("click", () => $("#newVoiceSampleFile").click());
+    $("#newVoiceSampleFile").addEventListener("change", (event) => {
+      const file = event.currentTarget.files?.[0];
+      if (file) useVoiceSample(file, file.name, "upload");
+    });
+    for (const eventName of ["dragenter", "dragover"]) {
+      $("#voiceUploadZone").addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        event.currentTarget.classList.add("dragging");
+      });
+    }
+    for (const eventName of ["dragleave", "drop"]) {
+      $("#voiceUploadZone").addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.currentTarget.classList.remove("dragging");
+      });
+    }
+    $("#voiceUploadZone").addEventListener("drop", (event) => {
+      const file = event.dataTransfer.files?.[0];
+      if (file) useVoiceSample(file, file.name, "upload");
+    });
+    $("#startVoiceMic").addEventListener("click", () => startVoiceCapture("microphone"));
+    $("#stopVoiceMic").addEventListener("click", () => stopVoiceCapture());
+    $("#startVoiceSystem").addEventListener("click", () => startVoiceCapture("system"));
+    $("#stopVoiceSystem").addEventListener("click", () => stopVoiceCapture());
+    $("#removeVoiceSample").addEventListener("click", clearVoiceSample);
+    $("#newVoiceReference").addEventListener("input", clearVoiceProfileError);
     $("#voiceProfile").addEventListener("change", () => renderVoiceProfile(true));
     $("#voiceText").addEventListener("input", (event) => {
       $("#voiceCharacterCount").textContent = `${event.currentTarget.value.length} / 10000`;
       event.currentTarget.removeAttribute("aria-invalid");
       $("#voiceError").hidden = true;
     });
-    $("#voiceConsent").addEventListener("change", (event) => { event.currentTarget.removeAttribute("aria-invalid"); $("#voiceError").hidden = true; });
     $("#cancelVoice").addEventListener("click", cancelVoiceGeneration);
     $("#saveVoiceAudio").addEventListener("click", saveVoiceAudio);
     $("#regenerateVoice").addEventListener("click", () => $("#voiceForm").requestSubmit());
