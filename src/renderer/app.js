@@ -1097,11 +1097,11 @@
       output.append(line);
       const hasDetails = entry.details && (typeof entry.details !== "object" || Object.keys(entry.details).length > 0);
       if (hasDetails) {
-        const disclosure = element("details", "diagnostic-details");
-        const summary = element("summary", "", "展开详情");
-        const detailOutput = element("pre", "", typeof entry.details === "string" ? entry.details : JSON.stringify(entry.details, null, 2));
-        append(disclosure, summary, detailOutput);
-        output.append(disclosure);
+        const detailText = typeof entry.details === "string" ? entry.details : Object.entries(entry.details)
+          .filter(([, value]) => value !== null && value !== undefined && value !== "")
+          .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`)
+          .join("\n");
+        if (detailText) output.append(element("pre", "diagnostic-details", detailText));
       }
       append(row, time, output);
       list.append(row);

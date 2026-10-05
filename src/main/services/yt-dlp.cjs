@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { AppError } = require("./validators.cjs");
+const { detectPlatform } = require("./cookie-manager.cjs");
 
 const PROGRESS_PREFIX = "CLIPPORT_PROGRESS|";
 const OUTPUT_PREFIX = "CLIPPORT_OUTPUT:";
@@ -72,9 +73,12 @@ function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
     "--write-thumbnail",
     "--write-subs", "--write-auto-subs",
     "--sub-langs", options.subtitleLanguages.length ? options.subtitleLanguages.join(",") : "all",
-    "--convert-subs", "srt",
     "--embed-metadata",
   );
+
+  // Bilibili already supplies SRT captions; its XML danmaku cannot be converted by FFmpeg.
+  const isBilibili = /^BiliBili/i.test(task.media?.extractor || "") || detectPlatform(task.sourceUrl)?.id === "bilibili";
+  if (!isBilibili) args.push("--convert-subs", "srt");
 
   if (task.infoJsonPath) args.push("--load-info-json", task.infoJsonPath);
   else args.push("--", task.sourceUrl);
@@ -122,7 +126,9 @@ function parseProgressLine(line) {
 }
 
 function classifyError(stderr = "") {
-  const text = stderr.toLowerCase();
+  const lines = stderr.split(/\r?\n/);
+  const errors = lines.filter((line) => /^\s*ERROR\b/i.test(line));
+  const text = (errors.length ? errors : lines.filter((line) => !/^\s*(?:WARNING:|CLIPPORT_)/i.test(line))).join("\n").toLowerCase();
   if (/fresh cookies?\s+\(not necessarily logged in\)\s+(?:are|is) needed/.test(text)) {
     return new AppError(
       "COOKIE_CHALLENGE",
@@ -144,6 +150,9 @@ function classifyError(stderr = "") {
   }
   if (/ffmpeg.*not found|ffprobe.*not found/.test(text)) {
     return new AppError("FFMPEG_MISSING", "FFmpeg 工具不可用", stderr);
+  }
+  if (/CLIPPORT_POST:started\|SubtitlesConvertor/i.test(stderr) && /preprocessing:/.test(text)) {
+    return new AppError("SUBTITLE_PROCESSING_FAILED", "字幕附件处理失败", stderr);
   }
   if (/timed out|temporary failure|network is unreachable|connection/.test(text)) {
     return new AppError("NETWORK_ERROR", "网络连接失败", stderr);

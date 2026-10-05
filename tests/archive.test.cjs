@@ -50,3 +50,18 @@ test("chooses a new archive path without overwriting an existing package", () =>
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("refuses to overwrite an existing archive when its path is already taken", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-archive-collision-"));
+  const sourceDirectory = path.join(directory, "source");
+  const archivePath = path.join(directory, "existing.zip");
+  try {
+    fs.mkdirSync(sourceDirectory);
+    fs.writeFileSync(path.join(sourceDirectory, "video.mp4"), "video");
+    fs.writeFileSync(archivePath, "original package");
+    await assert.rejects(createZipArchive({ sourceDirectory, archivePath }), { code: "EEXIST" });
+    assert.equal(fs.readFileSync(archivePath, "utf8"), "original package");
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

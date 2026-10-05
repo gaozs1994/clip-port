@@ -31,6 +31,20 @@ test("classifies explicit sign-in requirements as authentication errors", () => 
   assert.match(error.message, /登录状态/);
 });
 
+test("does not invalidate login when a subtitle warning precedes a conversion error", () => {
+  const error = classifyError([
+    "WARNING: [BiliBili] Subtitles are only available when logged in. Use --cookies for the authentication.",
+    "CLIPPORT_POST:started|SubtitlesConvertor",
+    "ERROR: Preprocessing: Error opening input files: Invalid data found when processing input",
+  ].join("\n"));
+  assert.equal(error.code, "SUBTITLE_PROCESSING_FAILED");
+});
+
+test("keeps genuine authentication errors when unrelated warnings are present", () => {
+  const error = classifyError("WARNING: Subtitle download failed\nERROR: [BiliBili] Login required");
+  assert.equal(error.code, "AUTH_REQUIRED");
+});
+
 test("download arguments request a complete media package", () => {
   const args = buildDownloadArgs({
     outputRoot: path.resolve("downloads"),
@@ -56,8 +70,29 @@ test("download arguments request a complete media package", () => {
   assert.ok(args.includes("--write-subs"));
   assert.ok(args.includes("--write-auto-subs"));
   assert.ok(args.includes("--keep-video"));
+  assert.equal(args[args.indexOf("--convert-subs") + 1], "srt");
   assert.equal(args.at(-2), "--");
   assert.equal(args.at(-1), "https://example.com/video");
+});
+
+test("preserves Bilibili SRT subtitles and XML danmaku without passing them to FFmpeg", () => {
+  for (const [sourceUrl, extractor] of [
+    ["https://www.bilibili.com/video/BV128H86SEHn/", "BiliBili"],
+    ["https://b23.tv/example", ""],
+    ["https://example.com/redirect", "BiliBiliBangumi"],
+  ]) {
+    const args = buildDownloadArgs({
+      sourceUrl,
+      outputRoot: path.resolve("downloads"),
+      media: { extractor },
+      options: { resolution: "360", fps: "60", subtitleLanguages: ["ai-zh", "danmaku"] },
+    }, { ffmpegPath: path.resolve("ffmpeg.exe") });
+    assert.equal(args.includes("--convert-subs"), false);
+    assert.equal(args[args.indexOf("--sub-langs") + 1], "ai-zh,danmaku");
+    assert.ok(args.includes("--write-subs"));
+    assert.ok(args.includes("--write-thumbnail"));
+    assert.ok(args.includes("--extract-audio"));
+  }
 });
 
 test("download arguments can consume a trusted temporary info document", () => {

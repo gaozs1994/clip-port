@@ -49,16 +49,26 @@ function createZipArchive({ sourceDirectory, archivePath }) {
     }
 
     fs.mkdirSync(path.dirname(archivePath), { recursive: true });
-    fs.rmSync(archivePath, { force: true });
-    const output = fs.createWriteStream(archivePath, { flags: "w" });
+    const output = fs.createWriteStream(archivePath, { flags: "wx" });
     const archive = archiver("zip", { zlib: { level: 9 } });
     let settled = false;
+    let created = false;
+    output.once("open", () => { created = true; });
     const fail = (error) => {
       if (settled) return;
       settled = true;
+      output.once("close", () => {
+        if (created) {
+          try {
+            fs.unlinkSync(archivePath);
+          } catch {
+            // Keep the original failure when an incomplete archive cannot be removed.
+          }
+        }
+        reject(error);
+      });
+      archive.abort();
       output.destroy();
-      fs.rmSync(archivePath, { force: true });
-      reject(error);
     };
 
     output.on("close", () => {

@@ -3811,26 +3811,9 @@ select,
 .diagnostic-source::after { content: "]"; }
 
 .diagnostic-details {
-  margin: 1px 0 3px;
-  color: var(--text-secondary);
-}
-
-.diagnostic-details summary {
-  width: max-content;
-  min-height: 20px;
-  color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
-  cursor: pointer;
-  font: inherit;
-}
-
-.diagnostic-details pre {
   margin: 3px 0 6px;
-  padding: 8px 10px;
-  overflow: auto;
-  border-left: 2px solid var(--border-strong);
   color: var(--text-secondary);
-  background: color-mix(in srgb, #000 14%, var(--surface));
-  font: 11px/1.55 "Cascadia Mono", Consolas, monospace;
+  font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
