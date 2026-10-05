@@ -31,12 +31,13 @@ test("classifies explicit sign-in requirements as authentication errors", () => 
   assert.match(error.message, /登录状态/);
 });
 
-test("download arguments map the MP3 preset centrally", () => {
+test("download arguments request a complete media package", () => {
   const args = buildDownloadArgs({
     outputRoot: path.resolve("downloads"),
+    packageDirectory: path.resolve("downloads", ".clipport-task"),
     sourceUrl: "https://example.com/video",
     options: {
-      preset: "mp3",
+      preset: "package",
       resolution: "1440",
       container: "mp4",
       fps: "60",
@@ -44,12 +45,17 @@ test("download arguments map the MP3 preset centrally", () => {
       writeMetadata: true,
       audioFormat: "original",
       audioQuality: "192",
-      subtitleLanguages: [],
+      subtitleLanguages: ["zh-Hans", "en"],
       includeAutomaticSubtitles: false,
     },
   }, { ffmpegPath: path.resolve("ffmpeg.exe") });
-  assert.equal(args[args.indexOf("--audio-format") + 1], "mp3");
-  assert.equal(args[args.indexOf("--audio-quality") + 1], "192K");
+  assert.equal(args[args.indexOf("--audio-format") + 1], "m4a");
+  assert.equal(args[args.indexOf("--format") + 1], "bv*[height<=1440][fps<=60]+ba/b[height<=1440][fps<=60]");
+  assert.equal(args[args.indexOf("--sub-langs") + 1], "zh-Hans,en");
+  assert.ok(args.includes("--write-thumbnail"));
+  assert.ok(args.includes("--write-subs"));
+  assert.ok(args.includes("--write-auto-subs"));
+  assert.ok(args.includes("--keep-video"));
   assert.equal(args.at(-2), "--");
   assert.equal(args.at(-1), "https://example.com/video");
 });
@@ -61,7 +67,7 @@ test("download arguments can consume a trusted temporary info document", () => {
     sourceUrl: "https://v.douyin.com/example/",
     infoJsonPath,
     options: {
-      preset: "recommended",
+      preset: "package",
       resolution: "1080",
       container: "mp4",
       fps: "60",

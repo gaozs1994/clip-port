@@ -17,6 +17,7 @@ const {
 } = require("./validators.cjs");
 const { buildDownloadArgs, classifyError, parseProgressLine } = require("./yt-dlp.cjs");
 const { buildYtDlpInfo, isDouyinUrl } = require("./douyin-resolver.cjs");
+const { collectPackageFiles, createZipArchive, nextArchivePath, safeArchiveName } = require("./archive.cjs");
 
 function now() {
   return new Date().toISOString();
@@ -64,6 +65,15 @@ function outputSize(paths = []) {
       return total;
     }
   }, 0);
+}
+
+function packageDirectory(task) {
+  return path.join(task.outputRoot, `.clipport-${task.id}`);
+}
+
+function mediaProbeTarget(files = []) {
+  const preferred = /\.(?:mp4|mkv|webm|mov|avi)$/i;
+  return files.find((value) => preferred.test(value)) || files[0] || "";
 }
 
 class TaskManager {
@@ -230,11 +240,12 @@ class TaskManager {
     task.error = null;
     task.progress = { percent: 0, downloadedBytes: 0, totalBytes: null, speed: null, eta: null };
     this.#save(task, { state: "preparing", stage: "正在准备下载" });
+    const stagingDirectory = packageDirectory(task);
+    fs.mkdirSync(stagingDirectory, { recursive: true });
     let infoJsonPath = "";
     if (task.downloadStrategy === "douyin-share") {
       try {
         if (!this.douyinResolver) throw new AppError("DOUYIN_RESOLVER_MISSING", "抖音解析组件不可用");
-        if (task.options.preset === "subtitles") throw new AppError("FORMAT_UNAVAILABLE", "该抖音视频没有可下载的字幕");
         const resolved = await this.douyinResolver.resolve(sourceUrl, { resolution: task.options.resolution });
         infoJsonPath = path.join(os.tmpdir(), `clipport-douyin-${task.id}.info.json`);
         fs.writeFileSync(infoJsonPath, JSON.stringify(buildYtDlpInfo(resolved)), { encoding: "utf8", mode: 0o600 });
@@ -248,7 +259,7 @@ class TaskManager {
         return;
       }
     }
-    const runtimeTask = { ...task, sourceUrl, infoJsonPath };
+    const runtimeTask = { ...task, sourceUrl, infoJsonPath, packageDirectory: stagingDirectory };
     const context = { reason: "", outputPaths: [], log: "", lastProgressAt: 0, tools, child: null, completion: null };
     const consume = (line) => {
       const event = parseProgressLine(line);
@@ -313,7 +324,7 @@ class TaskManager {
     } catch (error) {
       this.#save(task, {
         state: "failed",
-        stage: "无法启动下载工具",
+        stage: error.code === "PACKAGE_EMPTY" ? "未找到可打包的媒体文件" : "下载任务执行失败",
         error: { code: error.code || "PROCESS_ERROR", message: error.message },
       });
     } finally {
@@ -325,11 +336,13 @@ class TaskManager {
   }
 
   async #complete(task, context) {
-    const outputs = [...new Set(context.outputPaths.map((value) => path.resolve(value)).filter((value) => fs.existsSync(value)))];
-    this.#save(task, { state: "verifying", stage: "正在校验输出", finalOutputs: outputs });
+    const stagingDirectory = packageDirectory(task);
+    const packageFiles = collectPackageFiles(stagingDirectory);
+    const mediaOutput = mediaProbeTarget(packageFiles.length ? packageFiles : context.outputPaths.map((value) => path.resolve(value)));
+    this.#save(task, { state: "verifying", stage: "正在校验媒体包", finalOutputs: [] });
     let probe = null;
-    if (outputs[0]) {
-      const handle = spawnWithLines(context.tools.ffprobePath, ["-v", "error", "-show_format", "-show_streams", "-of", "json", outputs[0]]);
+    if (mediaOutput) {
+      const handle = spawnWithLines(context.tools.ffprobePath, ["-v", "error", "-show_format", "-show_streams", "-of", "json", mediaOutput]);
       const result = await handle.completion;
       if (result.code === 0) {
         try {
@@ -339,6 +352,12 @@ class TaskManager {
         }
       }
     }
+    const resolutionLabel = task.options.resolution === "best" ? "best" : `${task.options.resolution}p`;
+    const archiveStem = `${safeArchiveName(task.media.title)} [${task.media.id || task.id}] ${resolutionLabel}`;
+    const archivePath = nextArchivePath(task.outputRoot, archiveStem);
+    const archive = await createZipArchive({ sourceDirectory: stagingDirectory, archivePath });
+    fs.rmSync(stagingDirectory, { recursive: true, force: true });
+    const outputs = [archive.archivePath];
     const completedAt = now();
     const finalBytes = outputSize(outputs);
     this.#save(task, {

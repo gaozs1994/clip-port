@@ -18,7 +18,6 @@ const TASK_STATES = new Set([
   "failed",
   "interrupted",
 ]);
-const PRESETS = new Set(["recommended", "best", "mp4", "audio", "mp3", "subtitles"]);
 const VOICEBOX_LANGUAGES = new Set(["zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it", "he", "ar", "da", "el", "fi", "hi", "ms", "nl", "no", "pl", "sv", "sw", "tr"]);
 const URL_DELIMITER = /[\s<>"'`()\[\]{}【】（）《》，。！？；：、…]/u;
 const TRAILING_URL_PUNCTUATION = /[.,!?;:，。！？；：、]+$/u;
@@ -129,26 +128,24 @@ function assertOutputDirectory(value) {
 }
 
 function sanitizeTaskOptions(input = {}) {
-  const preset = PRESETS.has(input.preset) ? input.preset : "recommended";
-  const allowedResolution = new Set(["best", "2160", "1440", "1080", "720", "480", "360"]);
-  const allowedContainer = new Set(["auto", "mp4", "mkv", "webm"]);
-  const allowedFps = new Set(["auto", "highest", "30", "60"]);
-  const allowedAudioFormat = new Set(["original", "m4a", "opus", "mp3", "flac", "wav"]);
-  const allowedAudioQuality = new Set(["128", "192", "256", "320"]);
+  const resolution = input.resolution === "best" || /^(?:[1-9]\d{2,4})$/.test(String(input.resolution || "")) && Number(input.resolution) <= 16_384
+    ? String(input.resolution)
+    : "best";
+  const subtitleLanguages = Array.isArray(input.subtitleLanguages)
+    ? input.subtitleLanguages.filter((value) => typeof value === "string" && /^[\w-]{1,24}$/.test(value)).slice(0, 50)
+    : [];
 
   return {
-    preset,
-    resolution: allowedResolution.has(input.resolution) ? input.resolution : "1440",
-    container: allowedContainer.has(input.container) ? input.container : "mp4",
-    fps: allowedFps.has(input.fps) ? input.fps : "60",
-    embedThumbnail: input.embedThumbnail !== false,
-    writeMetadata: input.writeMetadata !== false,
-    audioFormat: allowedAudioFormat.has(input.audioFormat) ? input.audioFormat : "original",
-    audioQuality: allowedAudioQuality.has(input.audioQuality) ? input.audioQuality : "192",
-    subtitleLanguages: Array.isArray(input.subtitleLanguages)
-      ? input.subtitleLanguages.filter((value) => typeof value === "string" && /^[\w-]{1,24}$/.test(value)).slice(0, 12)
-      : [],
-    includeAutomaticSubtitles: Boolean(input.includeAutomaticSubtitles),
+    preset: "package",
+    resolution,
+    container: "mp4",
+    fps: "60",
+    embedThumbnail: true,
+    writeMetadata: true,
+    audioFormat: "m4a",
+    audioQuality: "original",
+    subtitleLanguages,
+    includeAutomaticSubtitles: true,
   };
 }
 

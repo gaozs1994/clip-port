@@ -34,19 +34,20 @@ test("redacts sensitive query parameters and blocks canonical persistence", () =
   assert.equal(canPersistCanonicalUrl("https://example.com/watch?v=abc"), true);
 });
 
-test("normalizes task options to a bounded public contract", () => {
-  assert.deepEqual(sanitizeTaskOptions({ preset: "mp3", audioQuality: "320", subtitleLanguages: ["zh-Hans", "../bad"] }), {
-    preset: "mp3",
-    resolution: "1440",
+test("normalizes task options to the complete media package contract", () => {
+  assert.deepEqual(sanitizeTaskOptions({ preset: "mp3", resolution: "2160", audioQuality: "320", subtitleLanguages: ["zh-Hans", "../bad"] }), {
+    preset: "package",
+    resolution: "2160",
     container: "mp4",
     fps: "60",
     embedThumbnail: true,
     writeMetadata: true,
-    audioFormat: "original",
-    audioQuality: "320",
+    audioFormat: "m4a",
+    audioQuality: "original",
     subtitleLanguages: ["zh-Hans"],
-    includeAutomaticSubtitles: false,
+    includeAutomaticSubtitles: true,
   });
+  assert.equal(sanitizeTaskOptions({ resolution: "99999" }).resolution, "best");
 });
 
 test("rejects concurrency outside the supported range", () => {

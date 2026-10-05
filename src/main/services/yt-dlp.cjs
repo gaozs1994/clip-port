@@ -34,23 +34,12 @@ function formatSelector(options) {
   const height = options.resolution === "best" ? "" : `[height<=${options.resolution}]`;
   const fps = ["30", "60"].includes(options.fps) ? `[fps<=${options.fps}]` : "";
   const cap = `${height}${fps}`;
-
-  switch (options.preset) {
-    case "best":
-      return "bv*+ba/b";
-    case "mp4":
-      return `bv*${cap}[vcodec^=avc1]+ba[acodec^=mp4a]/b${cap}[ext=mp4]/bv*${cap}+ba/b`;
-    case "audio":
-    case "mp3":
-      return "ba/b";
-    default:
-      return `bv*${cap}+ba/b${cap}`;
-  }
+  return `bv*${cap}+ba/b${cap}`;
 }
 
 function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
   const { options } = task;
-  const outputTemplate = path.join(task.outputRoot, "%(title).160B [%(id)s].%(ext)s");
+  const outputTemplate = path.join(task.packageDirectory || task.outputRoot, "%(title).160B [%(id)s].%(ext)s");
   const args = [
     "--ignore-config",
     "--newline",
@@ -75,25 +64,17 @@ function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
     ...optionalAuthArgs({ cookieFile, userAgent }),
   ];
 
-  if (options.preset === "subtitles") {
-    args.push("--skip-download", "--write-subs");
-    if (options.includeAutomaticSubtitles) args.push("--write-auto-subs");
-    if (options.subtitleLanguages.length) args.push("--sub-langs", options.subtitleLanguages.join(","));
-    args.push("--convert-subs", "srt");
-  } else {
-    args.push("--format", formatSelector(options));
-    if (options.container !== "auto" && !["audio", "mp3"].includes(options.preset)) {
-      args.push("--merge-output-format", options.container);
-    }
-    if (options.preset === "mp3" || (options.preset === "audio" && options.audioFormat !== "original")) {
-      args.push("--extract-audio", "--audio-format", options.preset === "mp3" ? "mp3" : options.audioFormat);
-      if (["mp3", "m4a", "opus"].includes(options.preset === "mp3" ? "mp3" : options.audioFormat)) {
-        args.push("--audio-quality", `${options.audioQuality}K`);
-      }
-    }
-    if (options.embedThumbnail) args.push("--embed-thumbnail");
-    if (options.writeMetadata) args.push("--embed-metadata");
-  }
+  args.push(
+    "--format", formatSelector(options),
+    "--merge-output-format", "mp4",
+    "--keep-video",
+    "--extract-audio", "--audio-format", "m4a",
+    "--write-thumbnail",
+    "--write-subs", "--write-auto-subs",
+    "--sub-langs", options.subtitleLanguages.length ? options.subtitleLanguages.join(",") : "all",
+    "--convert-subs", "srt",
+    "--embed-metadata",
+  );
 
   if (task.infoJsonPath) args.push("--load-info-json", task.infoJsonPath);
   else args.push("--", task.sourceUrl);
@@ -156,7 +137,7 @@ function classifyError(stderr = "") {
     return new AppError("UNSUPPORTED_URL", "暂不支持这个链接", stderr);
   }
   if (/requested format.*not available|no video formats/.test(text)) {
-    return new AppError("FORMAT_UNAVAILABLE", "所选下载方案不可用", stderr);
+    return new AppError("FORMAT_UNAVAILABLE", "该视频不支持所选分辨率", stderr);
   }
   if (/disk full|no space left/.test(text)) {
     return new AppError("DISK_FULL", "磁盘空间不足", stderr);

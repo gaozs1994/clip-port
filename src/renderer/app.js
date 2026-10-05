@@ -1,14 +1,6 @@
 (() => {
   "use strict";
 
-  const PRESETS = {
-    recommended: { label: "推荐视频", detail: "最高 1440p", tab: "video" },
-    best: { label: "原始最佳", detail: "最高可用质量", tab: "video" },
-    mp4: { label: "兼容 MP4", detail: "最高 1080p", tab: "video" },
-    audio: { label: "仅音频", detail: "原始音质", tab: "audio" },
-    mp3: { label: "MP3 音频", detail: "320K", tab: "audio" },
-    subtitles: { label: "仅字幕", detail: "全部语言", tab: "subtitle" },
-  };
   const AUTH_PLATFORM_UI = {
     douyin: { src: "./assets/platforms/douyin.jpg" },
     bilibili: { src: "./assets/platforms/bilibili.svg" },
@@ -109,7 +101,7 @@
     newVoiceSampleMode: "upload",
     updateStatus: { status: "idle", currentVersion: "--", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "启动后自动检查更新" },
     licenseStatus: { status: "unlicensed", active: false, hasLicense: false, deviceCode: "", message: "正在读取设备授权状态" },
-    preset: "recommended",
+    selectedResolution: "best",
     taskFilter: "all",
     parsing: false,
     diagnosticLogs: [],
@@ -250,7 +242,7 @@
         if (percent >= 100) {
           clearInterval(timer);
           timer = null;
-          task.finalOutputs = ["C:\\Users\\Public\\Downloads\\ClipPort\\demo.mp4"];
+          task.finalOutputs = ["C:\\Users\\Public\\Downloads\\ClipPort\\demo.zip"];
           const entry = { id: crypto.randomUUID(), taskId: task.id, title: task.media.title, uploader: task.media.uploader, extractor: task.media.extractor, result: "completed", completedAt: new Date().toISOString(), outputs: task.finalOutputs, options: task.options, probe: { format: { size: "1200000000" } } };
           demoHistory.unshift(entry);
           listeners.history.forEach((callback) => callback(structuredClone(entry)));
@@ -555,7 +547,30 @@
       placeholder.hidden = false;
     }
     $("#downloadDestination").textContent = state.settings.downloadDirectory;
+    renderResolutionOptions();
     refreshIcons();
+  }
+
+  function renderResolutionOptions() {
+    const media = state.media;
+    const select = $("#resolutionSelect");
+    if (!select) return;
+    const heights = [...new Set((media?.availableHeights || [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value > 0))].sort((a, b) => b - a);
+    const values = heights.length ? heights.map(String) : ["best"];
+    const current = values.includes(state.selectedResolution) ? state.selectedResolution : values[0];
+    state.selectedResolution = current;
+    select.replaceChildren(...values.map((value, index) => {
+      const option = element("option", "", value === "best" ? "最高可用画质" : `${value}p${index === 0 ? " · 最高" : ""}`);
+      option.value = value;
+      return option;
+    }));
+    select.value = current;
+    $("#resolutionHint").textContent = heights.length
+      ? `${heights.length} 档视频分辨率可用 · 下载包自动包含独立音频、封面和字幕`
+      : "解析器未返回画质列表，将使用最高可用画质 · 下载包自动包含附件";
+    $("#selectedQuality").textContent = current === "best" ? "最高可用画质" : `视频 ${current}p`;
   }
 
   function selectedVoiceProfile() {
@@ -758,45 +773,6 @@
     refreshIcons();
   }
 
-  function selectPreset(preset) {
-    if (!PRESETS[preset]) return;
-    state.preset = preset;
-    $$("[data-preset]").forEach((button) => {
-      const selected = button.dataset.preset === preset;
-      button.classList.toggle("selected", selected);
-      button.setAttribute("aria-checked", String(selected));
-    });
-    $("#selectedPreset").textContent = PRESETS[preset].label;
-    $("#selectedQuality").textContent = PRESETS[preset].detail;
-    if (preset === "recommended") $("#resolutionSelect").value = "1440";
-    if (preset === "mp4") $("#resolutionSelect").value = "1080";
-    selectOptionTab(PRESETS[preset].tab);
-  }
-
-  function selectOptionTab(tab) {
-    $$("[data-option-tab]").forEach((button) => {
-      const active = button.dataset.optionTab === tab;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", String(active));
-    });
-    $$("[data-option-panel]").forEach((panel) => {
-      const active = panel.dataset.optionPanel === tab;
-      panel.hidden = !active;
-      panel.classList.toggle("active", active);
-    });
-  }
-
-  function renderToolchain() {
-    const status = state.toolchain;
-    if (!status) return;
-    const { ytDlp, ffmpeg, ffprobe } = status.tools;
-    $("#ytDlpStatus").textContent = ytDlp.available ? `${compactVersion(ytDlp.version)} · ${ytDlp.source}` : "未安装，需要安装或选择文件";
-    $("#ffmpegStatus").textContent = ffmpeg.available ? `${compactVersion(ffmpeg.version)} · ${ffmpeg.source}` : "不可用，请选择可执行文件";
-    $("#ffprobeStatus").textContent = ffprobe.available ? `${compactVersion(ffprobe.version)} · ${ffprobe.source}` : "不可用，请选择可执行文件";
-    $("#toolchainAlert").hidden = status.ready;
-    $("#allToolsReady").hidden = !status.ready;
-  }
-
   function taskCounts() {
     return {
       all: state.tasks.length,
@@ -822,7 +798,7 @@
   }
 
   function taskSubtitle(task) {
-    if (!isVoiceTask(task)) return `${PRESETS[task.options?.preset]?.label || "媒体下载"} · ${formatDuration(task.media?.duration)}`;
+    if (!isVoiceTask(task)) return `完整媒体包 · ${formatDuration(task.media?.duration)}`;
     const voice = task.voice || {};
     return ["语音生成", voice.profileName, VOICE_LANGUAGE_LABELS[voice.language] || voice.language].filter(Boolean).join(" · ");
   }
@@ -1003,7 +979,7 @@
     const thumb = element("span", `history-thumb graphic-thumb ${["audio", "mp3"].includes(entry.options?.preset) ? "navy" : ""}`);
     thumb.append(icon(["audio", "mp3"].includes(entry.options?.preset) ? "music-2" : entry.options?.preset === "subtitles" ? "captions" : "file-video-2"));
     const main = element("div", "history-main"); append(main, element("strong", "", entry.title || "未命名媒体"), element("span", "", `${entry.uploader || "未知来源"} · ${formatDate(entry.completedAt)}`));
-    const format = element("div", "history-format"); append(format, element("strong", "", PRESETS[entry.options?.preset]?.label || "媒体"), element("span", "", historySize(entry)));
+    const format = element("div", "history-format"); append(format, element("strong", "", "完整媒体包"), element("span", "", historySize(entry)));
     const status = element("span", "completed-state"); append(status, icon(entry.result === "completed" ? "circle-check" : "circle-alert"), document.createTextNode(entry.result === "completed" ? "已完成" : "部分完成"));
     const actions = element("div", "history-actions");
     const open = element("button", "secondary-button compact"); open.type = "button"; open.dataset.historyAction = "open"; open.dataset.historyId = entry.id; append(open, icon("play"), element("span", "", "打开"));
@@ -1096,7 +1072,6 @@
     renderLicenseStatus();
     renderUpdateStatus();
     renderAuthPlatforms();
-    renderToolchain();
   }
 
   function renderDiagnosticLogs() {
@@ -1373,8 +1348,8 @@
     try {
       state.media = await call(api.media.parse(url));
       if (state.media.resolvedUrl) $("#sourceUrl").value = state.media.resolvedUrl;
+      state.selectedResolution = "best";
       renderMedia();
-      selectPreset("recommended");
       const recognizedFromText = Boolean(state.media.resolvedUrl && state.media.resolvedUrl !== url);
       $("#parseHint").replaceChildren(append(element("span"), icon("circle-check"), document.createTextNode(recognizedFromText ? "已从分享内容识别链接并完成解析" : "已识别单个媒体")));
     } catch (error) {
@@ -1406,16 +1381,16 @@
 
   function taskOptions() {
     return {
-      preset: state.preset,
-      resolution: state.preset === "best" ? "best" : $("#resolutionSelect").value,
-      container: state.preset === "best" ? "auto" : "mp4",
+      preset: "package",
+      resolution: $("#resolutionSelect").value || "best",
+      container: "mp4",
       fps: "60",
-      embedThumbnail: $("#embedThumbnail").checked,
-      writeMetadata: $("#writeMetadata").checked,
-      audioFormat: state.preset === "mp3" ? "mp3" : "original",
-      audioQuality: "320",
+      embedThumbnail: true,
+      writeMetadata: true,
+      audioFormat: "m4a",
+      audioQuality: "original",
       subtitleLanguages: state.media?.subtitleLanguages || [],
-      includeAutomaticSubtitles: $("#includeAutoSubtitles").checked,
+      includeAutomaticSubtitles: true,
     };
   }
 
@@ -2195,8 +2170,6 @@
   function bindEvents() {
     document.addEventListener("click", (event) => {
       const nav = event.target.closest("[data-nav]"); if (nav) showView(nav.dataset.nav);
-      const preset = event.target.closest("[data-preset]"); if (preset) selectPreset(preset.dataset.preset);
-      const tab = event.target.closest("[data-option-tab]"); if (tab) selectOptionTab(tab.dataset.optionTab);
       const filter = event.target.closest("[data-task-filter]"); if (filter) { state.taskFilter = filter.dataset.taskFilter; renderTasks(); }
       const taskAction = event.target.closest("[data-task-action]"); if (taskAction) handleTaskAction(taskAction);
       const historyAction = event.target.closest("[data-history-action]");
@@ -2205,8 +2178,6 @@
       if (settingsAnchor) activateSettingsSection(settingsAnchor.dataset.settingsAnchor);
       const authAction = event.target.closest("[data-auth-action]");
       if (authAction) handleAuthAction(authAction);
-      const selectTool = event.target.closest("[data-select-tool]");
-      if (selectTool) call(api.tools.chooseBinary(selectTool.dataset.selectTool)).then((status) => { if (status) { state.toolchain = status; renderToolchain(); showToast("工具路径已更新"); } }).catch((error) => showToast("无法选择工具", error.message, "error"));
       const voiceModelAction = event.target.closest("[data-voice-model-action]");
       if (voiceModelAction) handleVoiceModelAction(voiceModelAction);
       const voiceProfileType = event.target.closest("[data-voice-profile-type]");
@@ -2216,7 +2187,7 @@
     });
     document.addEventListener("keydown", (event) => {
       if (!new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]).has(event.key)) return;
-      const groups = ["[data-preset]", "[data-option-tab]", "[data-task-filter]", "[data-voice-profile-type]", "[data-voice-sample-mode]"];
+      const groups = ["[data-task-filter]", "[data-voice-profile-type]", "[data-voice-sample-mode]"];
       const selector = groups.find((value) => event.target.matches(value));
       if (!selector) return;
       const buttons = $$(selector).filter((button) => !button.disabled && !button.hidden);
@@ -2231,8 +2202,11 @@
     $("#parseForm").addEventListener("submit", parseUrl);
     $("#pasteButton").addEventListener("click", pasteUrl);
     $("#pasteTopButton").addEventListener("click", pasteUrl);
-    $("#resetPreset").addEventListener("click", () => selectPreset("recommended"));
     $("#downloadButton").addEventListener("click", createTask);
+    $("#resolutionSelect").addEventListener("change", () => {
+      state.selectedResolution = $("#resolutionSelect").value || "best";
+      renderResolutionOptions();
+    });
     $("#destinationButton").addEventListener("click", () => $("#chooseDirectory").click());
     $("#historySearch").addEventListener("input", renderHistory);
     $("#closeToast").addEventListener("click", () => $("#toast").classList.remove("show"));
@@ -2310,7 +2284,6 @@
     $("#themeSelect").addEventListener("change", (event) => updateSettings({ theme: event.target.value }));
     $("#topLicenseStatus").addEventListener("click", focusLicenseSettings);
     $("#themeToggle").addEventListener("click", () => updateSettings({ theme: document.body.dataset.theme === "dark" ? "light" : "dark" }));
-    $("#installYtDlp").addEventListener("click", async (event) => { const button = event.currentTarget; button.disabled = true; button.setAttribute("aria-busy", "true"); $("span", button).textContent = "正在更新"; try { state.toolchain = await call(api.tools.installYtDlp()); renderToolchain(); showToast("yt-dlp 已更新并通过自检"); } catch (error) { showToast("更新失败", error.message, "error"); } finally { button.disabled = false; button.removeAttribute("aria-busy"); $("span", button).textContent = "检查更新"; } });
     $("#minimizeButton").addEventListener("click", api.app.minimize);
     $("#maximizeButton").addEventListener("click", api.app.toggleMaximize);
     $("#closeButton").addEventListener("click", api.app.close);
@@ -2334,13 +2307,12 @@
     try {
       const bootstrap = await call(api.app.bootstrap());
       Object.assign(state, bootstrap);
-      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); renderVoicebox(); renderDiagnosticLogs(); selectPreset("recommended");
+      applyTheme(); renderSettings(); renderMedia(); renderTasks(); renderHistory(); renderVoicebox(); renderDiagnosticLogs();
       showView(location.hash.slice(1) || "download");
       api.events.onTaskChanged(upsertTask);
       api.events.onHistoryChanged(upsertHistory);
       api.events.onToolStatus((status) => {
-        if (status?.tools) { state.toolchain = status; renderToolchain(); }
-        else if (status?.message) showToast("工具链", status.message);
+        if (status?.tools) state.toolchain = status;
       });
       api.events.onAuthChanged?.(upsertAuthPlatform);
       api.events.onUpdateStatus?.((status) => {
