@@ -626,6 +626,10 @@ async function initialize() {
   updateManager = new UpdateManager({
     updater: autoUpdater,
     app,
+    onSourceError: ({ source, phase, error }) => diagnosticLog.warn("updates", `${source} 更新服务${phase === "check" ? "检查" : "下载"}失败`, {
+      message: error?.message,
+      code: error?.code,
+    }),
     onStatus: (status) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setProgressBar(status.status === "downloading" ? Math.max(0, Math.min(1, Number(status.progress) / 100 || 0)) : -1);

@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
 const test = require("node:test");
 const { UpdateManager } = require("../src/main/services/update-manager.cjs");
+const { COS_UPDATE_URL, UPDATE_SOURCES } = require("../src/main/services/update-config.cjs");
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -11,6 +12,12 @@ class FakeUpdater extends EventEmitter {
     this.checkCalls = 0;
     this.downloadCalls = 0;
     this.installCalls = 0;
+    this.feeds = [];
+  }
+
+  setFeedURL(options) {
+    this.feeds.push(options);
+    this.feed = options;
   }
 
   async checkForUpdates() {
@@ -29,6 +36,7 @@ class FakeUpdater extends EventEmitter {
 function createHarness({ packaged = true, checkIntervalMs = 21_600_000 } = {}) {
   const updater = new FakeUpdater();
   const states = [];
+  const sourceErrors = [];
   const timers = [];
   const clearedTimers = [];
   let beforeInstallCalls = 0;
@@ -37,6 +45,7 @@ function createHarness({ packaged = true, checkIntervalMs = 21_600_000 } = {}) {
     platform: "win32",
     app: { isPackaged: packaged, getVersion: () => "0.1.6" },
     onStatus: (status) => states.push(status),
+    onSourceError: (error) => sourceErrors.push(error),
     beforeInstall: async () => { beforeInstallCalls += 1; },
     checkIntervalMs,
     setTimer: (callback, delay) => {
@@ -46,7 +55,7 @@ function createHarness({ packaged = true, checkIntervalMs = 21_600_000 } = {}) {
     },
     clearTimer: (timer) => clearedTimers.push(timer),
   });
-  return { manager, updater, states, timers, clearedTimers, get beforeInstallCalls() { return beforeInstallCalls; } };
+  return { manager, updater, states, sourceErrors, timers, clearedTimers, get beforeInstallCalls() { return beforeInstallCalls; } };
 }
 
 test("does not contact the update service in development", async () => {
@@ -54,6 +63,100 @@ test("does not contact the update service in development", async () => {
   const status = await manager.check();
   assert.equal(status.status, "disabled");
   assert.equal(updater.checkCalls, 0);
+  assert.equal(updater.feeds.length, 0);
+});
+
+test("uses the public COS update folder with single range requests", async () => {
+  const { manager, updater } = createHarness();
+  updater.checkForUpdates = async () => updater.emit("update-not-available");
+  assert.equal((await manager.check()).status, "current");
+  assert.deepEqual(updater.feeds, [UPDATE_SOURCES[0].options]);
+  assert.equal(updater.feed.url, COS_UPDATE_URL);
+  assert.equal(updater.feed.useMultipleRangeRequest, false);
+  assert.equal(UPDATE_SOURCES[1].options.repo, require("../package.json").build.publish[0].repo);
+});
+
+test("falls back to GitHub on a COS check error without flashing an error state", async () => {
+  const harness = createHarness();
+  harness.updater.checkForUpdates = async () => {
+    if (harness.updater.feed.provider === "generic") {
+      const error = new Error("COS unavailable");
+      harness.updater.emit("error", error);
+      throw error;
+    }
+    harness.updater.emit("update-available", { version: "0.1.7" });
+  };
+  await harness.manager.check();
+  await flush();
+  assert.deepEqual(harness.updater.feeds, UPDATE_SOURCES.map((source) => source.options));
+  assert.equal(harness.updater.downloadCalls, 1);
+  assert.equal(harness.manager.getStatus().latestVersion, "0.1.7");
+  assert.equal(harness.states.some((status) => status.status === "error"), false);
+  assert.equal(harness.sourceErrors[0].source, "COS");
+});
+
+test("reports a final check failure and tries COS again on the next check", async () => {
+  const harness = createHarness();
+  harness.updater.checkForUpdates = async () => {
+    const error = new Error("Unavailable");
+    harness.updater.emit("error", error);
+    throw error;
+  };
+  assert.equal((await harness.manager.check()).status, "error");
+  assert.equal(harness.sourceErrors.length, 2);
+  harness.updater.checkForUpdates = async () => harness.updater.emit("update-not-available");
+  assert.equal((await harness.manager.check()).status, "current");
+  assert.equal(harness.updater.feeds[2].provider, "generic");
+});
+
+test("rechecks GitHub and downloads the same version when COS download fails", async () => {
+  const harness = createHarness();
+  harness.updater.checkForUpdates = async () => {
+    harness.updater.emit("checking-for-update");
+    harness.updater.emit("update-available", { version: "0.1.7" });
+    return { isUpdateAvailable: true, updateInfo: { version: "0.1.7" } };
+  };
+  harness.updater.downloadUpdate = async () => {
+    harness.updater.downloadCalls += 1;
+    if (harness.updater.feed.provider === "generic") {
+      const error = new Error("COS download failed");
+      harness.updater.emit("error", error);
+      throw error;
+    }
+    harness.updater.emit("download-progress", { percent: 100, transferred: 100, total: 100, bytesPerSecond: 10 });
+    harness.updater.emit("update-downloaded", { version: "0.1.7" });
+  };
+  await harness.manager.check();
+  await harness.manager.downloadPromise;
+  assert.equal(harness.updater.downloadCalls, 2);
+  assert.equal(harness.manager.getStatus().status, "downloaded");
+  assert.equal(harness.manager.getStatus().latestVersion, "0.1.7");
+  assert.equal(harness.updater.installCalls, 0);
+  assert.equal(harness.states.some((status) => status.status === "error"), false);
+  assert.equal(harness.sourceErrors[0].phase, "download");
+});
+
+test("does not switch to a different or unavailable release during download fallback", async () => {
+  for (const backupVersion of ["0.1.6", "0.1.8"]) {
+    const harness = createHarness();
+    harness.updater.checkForUpdates = async () => {
+      const version = harness.updater.feed.provider === "generic" ? "0.1.7" : backupVersion;
+      const available = version !== "0.1.6";
+      harness.updater.emit(available ? "update-available" : "update-not-available", { version });
+      return { isUpdateAvailable: available, updateInfo: { version } };
+    };
+    harness.updater.downloadUpdate = async () => {
+      harness.updater.downloadCalls += 1;
+      throw new Error("Download unavailable");
+    };
+    await harness.manager.check();
+    await harness.manager.downloadPromise;
+    assert.equal(harness.manager.getStatus().status, "error");
+    assert.equal(harness.manager.getStatus().latestVersion, "0.1.7");
+    assert.equal(harness.updater.downloadCalls, 1);
+    assert.equal(harness.updater.installCalls, 0);
+    assert.equal(harness.states.some((status) => status.status === "current"), false);
+  }
 });
 
 test("automatically downloads a newer version without prompting", async () => {

@@ -1,3 +1,5 @@
+const { UPDATE_SOURCES } = require("./update-config.cjs");
+
 const DEFAULT_STATE = Object.freeze({
   status: "idle",
   latestVersion: "",
@@ -15,6 +17,7 @@ class UpdateManager {
     app,
     platform = process.platform,
     onStatus = () => {},
+    onSourceError = () => {},
     beforeInstall = async () => {},
     checkIntervalMs = DEFAULT_CHECK_INTERVAL_MS,
     setTimer = setTimeout,
@@ -23,6 +26,7 @@ class UpdateManager {
     this.updater = updater;
     this.app = app;
     this.onStatus = onStatus;
+    this.onSourceError = onSourceError;
     this.beforeInstall = beforeInstall;
     this.checkIntervalMs = Number.isFinite(checkIntervalMs) && checkIntervalMs > 0 ? checkIntervalMs : DEFAULT_CHECK_INTERVAL_MS;
     this.setTimer = setTimer;
@@ -38,6 +42,8 @@ class UpdateManager {
     this.downloadPromise = null;
     this.scheduleTimer = null;
     this.started = false;
+    this.sourceIndex = 0;
+    this.checkingDownloadFallback = false;
 
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
@@ -48,12 +54,15 @@ class UpdateManager {
 
   bindEvents() {
     this.updater.on("checking-for-update", () => {
+      if (this.checkingDownloadFallback) return;
       this.setState({ status: "checking", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "正在连接更新服务" });
     });
     this.updater.on("update-not-available", () => {
+      if (this.checkingDownloadFallback) return;
       this.setState({ status: "current", latestVersion: "", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "已是最新版本" });
     });
     this.updater.on("update-available", (info = {}) => {
+      if (this.checkingDownloadFallback) return;
       const latestVersion = String(info.version || "");
       this.setState({ status: "available", latestVersion, progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: latestVersion ? `发现新版本 ${latestVersion}` : "发现新版本" });
       void this.download();
@@ -70,6 +79,7 @@ class UpdateManager {
       this.setState({ status: "downloaded", latestVersion, progress: 100, downloadedBytes: this.state.totalBytes, bytesPerSecond: 0, message: "更新已下载，等待重启安装" });
     });
     this.updater.on("error", () => {
+      if (this.checkPromise || this.downloadPromise) return;
       this.setState({
         status: "error",
         progress: null,
@@ -116,7 +126,7 @@ class UpdateManager {
     if (this.checkPromise) return this.checkPromise;
 
     this.setState({ status: "checking", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "正在检查新版本" });
-    this.checkPromise = this.updater.checkForUpdates()
+    this.checkPromise = Promise.resolve().then(() => this.checkWithFallback())
       .catch(() => {
         this.setState({ status: "error", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "无法连接更新服务，请稍后重试" });
       })
@@ -125,18 +135,62 @@ class UpdateManager {
     return this.checkPromise;
   }
 
+  async checkWithFallback() {
+    for (let index = 0; index < UPDATE_SOURCES.length; index += 1) {
+      this.sourceIndex = index;
+      const source = UPDATE_SOURCES[index];
+      this.updater.setFeedURL(source.options);
+      try {
+        return await this.updater.checkForUpdates();
+      } catch (error) {
+        this.onSourceError({ source: source.name, phase: "check", error });
+        if (index === UPDATE_SOURCES.length - 1) throw error;
+        this.setState({ message: "正在连接备用更新服务" });
+      }
+    }
+  }
+
   async download() {
     if (!this.enabled || this.state.status !== "available") return this.getStatus();
     if (this.downloadPromise) return this.downloadPromise;
 
     this.setState({ status: "downloading", progress: 0, downloadedBytes: 0, totalBytes: null, bytesPerSecond: null, message: "正在准备下载更新" });
-    this.downloadPromise = this.updater.downloadUpdate()
+    this.downloadPromise = Promise.resolve().then(() => this.downloadWithFallback(this.state.latestVersion))
       .catch(() => {
         this.setState({ status: "error", progress: null, downloadedBytes: null, totalBytes: null, bytesPerSecond: null, message: "更新下载失败，请稍后重试" });
       })
       .then(() => this.getStatus())
       .finally(() => { this.downloadPromise = null; });
     return this.downloadPromise;
+  }
+
+  async downloadWithFallback(version) {
+    for (let index = this.sourceIndex; index < UPDATE_SOURCES.length; index += 1) {
+      const source = UPDATE_SOURCES[index];
+      try {
+        if (index !== this.sourceIndex) {
+          // Recheck the backup provider before downloading; never mix release versions.
+          await this.checkPromise;
+          this.updater.setFeedURL(source.options);
+          this.checkingDownloadFallback = true;
+          let result;
+          try {
+            result = await this.updater.checkForUpdates();
+          } finally {
+            this.checkingDownloadFallback = false;
+          }
+          if (!result?.isUpdateAvailable || result.updateInfo?.version !== version) {
+            throw new Error("Backup update source does not have the requested release.");
+          }
+          this.sourceIndex = index;
+        }
+        return await this.updater.downloadUpdate();
+      } catch (error) {
+        this.onSourceError({ source: source.name, phase: "download", error });
+        if (index === UPDATE_SOURCES.length - 1) throw error;
+        this.setState({ progress: 0, downloadedBytes: 0, totalBytes: null, bytesPerSecond: null, message: "正在从备用服务下载更新" });
+      }
+    }
   }
 
   async install() {

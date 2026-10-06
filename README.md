@@ -83,6 +83,20 @@ npm run license:issue -- --device CPD1-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX -
 
 每次向 `main` 分支推送提交时，[Windows Release 工作流](.github/workflows/release.yml) 会自动完成代码检查、测试和 NSIS 打包，并在 GitHub Releases 中创建唯一的 `build-<运行序号>` 版本，将 Windows 安装包作为附件发布。也可以在 GitHub Actions 页面手动触发该工作流。
 
+### 腾讯云 COS 更新源
+
+应用优先通过 COS 检查和下载安装包；COS 请求失败时自动切换到 GitHub Releases。下载过程中切换源会重新检查备用源，并且只下载相同版本，避免混用版本。发现更新后仍自动下载，由用户手动确认安装。
+
+公开配置维护在 `src/main/services/update-config.cjs`：存储桶 `qcloudtest-1255573942`，地域 `ap-guangzhou`，更新目录 `clipport/windows/x64/`。不需要额外服务器、自定义域名或终端用户登录。
+
+在 GitHub 仓库的 Settings > Secrets and variables > Actions 配置 `COS_SECRET_ID` 和 `COS_SECRET_KEY`。密钥只用于发布步骤，不进入代码或安装包。推荐使用仅授权该更新目录的 CAM 子账号；上传需要 `cos:PutObject`、`cos:InitiateMultipartUpload`、`cos:UploadPart`、`cos:CompleteMultipartUpload`、`cos:ListMultipartUploads`、`cos:ListParts`，SDK 的上传前检查需要 `cos:HeadObject`。无需授权修改 ACL 或删除对象。
+
+该目录须允许匿名读取，其他目录可保持私有。不要使用短期有效的签名下载地址；若启用 Referer 防盗链，需允许无 Referer 的桌面客户端请求。公开文件存在流量盗刷风险，建议配置费用告警。
+
+每次发布先保留 GitHub Release，再执行 `npm run publish:cos`：校验本地安装包的大小和 SHA-512，上传安装包、`.blockmap` 与 `release-notes.json`，核验匿名访问、文件元数据和安装包字节范围请求，最后上传并读取核验 `latest.yml`。更新清单禁用缓存，带版本号的安装包与差分文件长期缓存，旧版本保留以支持差分更新。上传失败会令工作流失败，不会提前公布未就绪的更新清单。
+
+已安装的旧版仍使用 GitHub 更新，首次升级到接入 COS 的版本后才开始使用国内更新源。
+
 ## 目录
 
 - `src/main`：Electron 主进程、工具链和任务引擎

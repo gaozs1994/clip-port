@@ -19,7 +19,8 @@
     "license:keygen": "node scripts/license-issuer.cjs generate-key",
     "license:issue": "node scripts/license-issuer.cjs issue",
     "build": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && npm run prepare:voicebox && electron-builder --dir",
-    "dist": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && npm run prepare:voicebox && electron-builder --win nsis --publish never"
+    "dist": "npm run check && npm test && npm run prepare:renderer && npm run prepare:ytdlp && npm run prepare:voicebox && electron-builder --win nsis --publish never",
+    "publish:cos": "node scripts/publish-cos.cjs"
   },
   "dependencies": {
     "archiver": "^7.0.1",
@@ -27,8 +28,10 @@
     "ffmpeg-ffprobe-static": "6.1.2-rc.1"
   },
   "devDependencies": {
+    "cos-nodejs-sdk-v5": "3.0.0",
     "electron": "44.4.1",
     "electron-builder": "26.15.3",
+    "js-yaml": "4.3.2",
     "lucide": "1.46.0"
   },
   "build": {

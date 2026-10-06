@@ -23,6 +23,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Verify COS publishing credentials
+        shell: pwsh
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+        run: |
+          if (-not $env:COS_SECRET_ID -or -not $env:COS_SECRET_KEY) {
+            throw "Configure COS_SECRET_ID and COS_SECRET_KEY in repository Actions secrets."
+          }
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
@@ -73,3 +83,9 @@ jobs:
             --title "ClipPort $env:RELEASE_TAG" `
             --notes-file $releaseNotes.FullName `
             --latest
+
+      - name: Publish and verify COS update files
+        env:
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+        run: npm run publish:cos
