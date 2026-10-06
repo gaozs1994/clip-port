@@ -7,6 +7,7 @@ const PROGRESS_PREFIX = "CLIPPORT_PROGRESS|";
 const OUTPUT_PREFIX = "CLIPPORT_OUTPUT:";
 const POST_PREFIX = "CLIPPORT_POST:";
 const IMAGE_PREFIX = "CLIPPORT_IMAGES:";
+const TEXT_PREFIX = "CLIPPORT_TEXT:";
 
 function optionalFfmpegArgs(ffmpegPath) {
   return ffmpegPath ? ["--ffmpeg-location", path.dirname(ffmpegPath)] : [];
@@ -64,6 +65,8 @@ function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
     `postprocess:${POST_PREFIX}%(progress.status)s|%(progress.postprocessor)s`,
     "--print",
     `after_move:${OUTPUT_PREFIX}%(filepath)j`,
+    "--print",
+    `after_video:${TEXT_PREFIX}%(.{title,description})j`,
     ...optionalFfmpegArgs(ffmpegPath),
     ...optionalAuthArgs({ cookieFile, userAgent }),
   ];
@@ -106,6 +109,14 @@ function parseNumber(value) {
 }
 
 function parseProgressLine(line) {
+  if (line.startsWith(TEXT_PREFIX)) {
+    try {
+      const value = JSON.parse(line.slice(TEXT_PREFIX.length));
+      return value && typeof value === "object" && !Array.isArray(value) ? { type: "text", value } : null;
+    } catch {
+      return null;
+    }
+  }
   if (line.startsWith(IMAGE_PREFIX)) {
     try {
       const thumbnails = JSON.parse(line.slice(IMAGE_PREFIX.length));

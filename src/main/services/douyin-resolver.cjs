@@ -112,6 +112,7 @@ function buildYtDlpInfo(result) {
     _type: "video",
     id: result.id,
     title: result.title,
+    description: result.title,
     uploader: result.uploader,
     duration: result.duration,
     upload_date: result.uploadDate,

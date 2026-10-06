@@ -270,7 +270,7 @@ class TaskManager {
       }
     }
     const runtimeTask = { ...task, sourceUrl, infoJsonPath, packageDirectory: stagingDirectory };
-    const context = { reason: "", outputPaths: [], imageThumbnails: [], log: "", lastProgressAt: 0, tools, child: null, completion: null };
+    const context = { reason: "", outputPaths: [], imageThumbnails: [], textInfo: null, log: "", lastProgressAt: 0, tools, child: null, completion: null };
     const consume = (line) => {
       const event = parseProgressLine(line);
       if (!event) {
@@ -279,6 +279,8 @@ class TaskManager {
       }
       if (event.type === "images") {
         context.imageThumbnails = event.value;
+      } else if (event.type === "text") {
+        context.textInfo = event.value;
       } else if (event.type === "output" && typeof event.value === "string") {
         context.outputPaths.push(event.value);
       } else if (event.type === "postprocess") {
@@ -352,8 +354,13 @@ class TaskManager {
     const stagingDirectory = packageDirectory(task);
     const imageNote = task.media.contentType === "images";
     const sourceDirectory = imageNote ? prepareImagePackage(stagingDirectory, context.imageThumbnails, task.media.imageCount) : stagingDirectory;
-    const packageFiles = collectPackageFiles(sourceDirectory);
-    const mediaOutput = imageNote ? "" : mediaProbeTarget(packageFiles.length ? packageFiles : context.outputPaths.map((value) => path.resolve(value)));
+    const packageFiles = collectPackageFiles(sourceDirectory).filter((value) => path.basename(value) !== "文案.txt");
+    if (!packageFiles.length) throw new AppError("PACKAGE_EMPTY", "未找到可打包的媒体文件");
+    const mediaOutput = imageNote ? "" : mediaProbeTarget(packageFiles);
+    const title = (typeof context.textInfo?.title === "string" && context.textInfo.title.trim()) || task.media.title;
+    const description = typeof context.textInfo?.description === "string" ? context.textInfo.description.trim() : "";
+    const text = description && description !== title ? `${title}\n\n${description}` : title;
+    fs.writeFileSync(path.join(sourceDirectory, "文案.txt"), `\uFEFF${text}\n`, "utf8");
     this.#save(task, { state: "verifying", stage: "正在校验媒体包", finalOutputs: [] });
     let probe = null;
     if (mediaOutput) {

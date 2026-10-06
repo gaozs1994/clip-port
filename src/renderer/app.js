@@ -539,8 +539,9 @@
     $("#mediaSize").textContent = media.best?.estimatedBytes ? `约 ${formatBytes(media.best.estimatedBytes)}` : imageNote ? "下载后确定" : "由下载格式决定";
     $("#packageTitle").textContent = imageNote ? "图片包" : "完整媒体包";
     $("#selectedPackage").textContent = imageNote ? "图片包" : "完整媒体包";
-    $("#packageDescription").textContent = imageNote ? "全部图片 · PNG" : "视频 · 独立音频 · 封面 · 可用字幕";
+    $("#packageDescription").textContent = imageNote ? "全部图片 · PNG · 文案 TXT" : "视频 · 独立音频 · 封面 · 可用字幕 · 文案 TXT";
     const assets = imageNote ? [["images", `${media.imageCount} 张图片`]] : [["file-video-2", "视频"], ["music-2", "音频"], ["image", "封面"], ["captions", "字幕"]];
+    assets.push(["file-text", "文案 TXT"]);
     $("#packageAssets").replaceChildren(...assets.map(([name, label]) => append(element("span"), icon(name), document.createTextNode(label))));
     const frame = $("#mediaThumbnail");
     frame.querySelector("img")?.remove();

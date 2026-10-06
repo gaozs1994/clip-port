@@ -47,6 +47,7 @@ test("downloads image notes without video, audio or subtitle processing", () => 
     assert.equal(args.includes(flag), false, flag);
   }
   assert.equal(args[args.indexOf("--convert-thumbnails") + 1], "png");
+  assert.ok(args.includes("after_video:CLIPPORT_TEXT:%(.{title,description})j"));
 });
 
 test("recognizes image notes and counts distinct images instead of preview variants", () => {
@@ -74,6 +75,14 @@ test("reads image completion data without treating it as a video output", () => 
   assert.equal(event.type, "images");
   assert.deepEqual(event.value, [{ filepath: "image.png" }]);
   assert.equal(parseProgressLine("CLIPPORT_IMAGES:not-json"), null);
+});
+
+test("reads complete multiline text metadata as JSON without interpreting it as progress", () => {
+  const value = { title: "标题", description: '第一段\n\n第二段 "引号"\n#话题' };
+  assert.deepEqual(parseProgressLine(`CLIPPORT_TEXT:${JSON.stringify(value)}`), { type: "text", value });
+  for (const payload of ["not-json", "null", "[]", '"text"']) {
+    assert.equal(parseProgressLine(`CLIPPORT_TEXT:${payload}`), null);
+  }
 });
 
 test("classifies platform cookie challenges without invalidating login", () => {
@@ -127,6 +136,7 @@ test("download arguments request a complete media package", () => {
   assert.ok(args.includes("--write-subs"));
   assert.ok(args.includes("--write-auto-subs"));
   assert.ok(args.includes("--keep-video"));
+  assert.ok(args.includes("after_video:CLIPPORT_TEXT:%(.{title,description})j"));
   assert.equal(args[args.indexOf("--convert-subs") + 1], "srt");
   assert.equal(args.at(-2), "--");
   assert.equal(args.at(-1), "https://example.com/video");

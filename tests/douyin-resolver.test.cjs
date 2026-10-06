@@ -85,6 +85,7 @@ test("resolves a short link through the current Douyin share-page flow", async (
 
   const info = buildYtDlpInfo(result);
   assert.equal(info.id, id);
+  assert.equal(info.description, result.title);
   assert.equal(info.formats[0].url, result.downloadUrl);
   assert.equal(info.formats[0].height, 1080);
   assert.equal(info.thumbnail, "https://example.com/cover.webp");
