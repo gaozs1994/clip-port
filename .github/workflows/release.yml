@@ -44,6 +44,7 @@ jobs:
       - name: Build Windows installer
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          CLIPPORT_RELEASE_BUILD: "1"
         run: npm run dist
 
       - name: Publish GitHub Release
@@ -59,13 +60,16 @@ jobs:
             Select-Object -First 1
           $updateManifest = Get-Item -Path "dist/latest.yml" -ErrorAction SilentlyContinue
 
-          if (-not $installer -or -not $blockmap -or -not $updateManifest) {
-            throw "Installer, blockmap, or update manifest was not produced."
+          $releaseHistory = Get-Item -Path "output/release-notes.json" -ErrorAction SilentlyContinue
+          $releaseNotes = Get-Item -Path "output/release-notes.md" -ErrorAction SilentlyContinue
+
+          if (-not $installer -or -not $blockmap -or -not $updateManifest -or -not $releaseHistory -or -not $releaseNotes) {
+            throw "Installer, update manifest, or release notes were not produced."
           }
 
-          gh release create $env:RELEASE_TAG $installer.FullName $blockmap.FullName $updateManifest.FullName `
+          gh release create $env:RELEASE_TAG $installer.FullName $blockmap.FullName $updateManifest.FullName $releaseHistory.FullName `
             --repo $env:GITHUB_REPOSITORY `
             --target $env:GITHUB_SHA `
             --title "ClipPort $env:RELEASE_TAG" `
-            --generate-notes `
+            --notes-file $releaseNotes.FullName `
             --latest

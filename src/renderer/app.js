@@ -106,6 +106,7 @@
     parsing: false,
     diagnosticLogs: [],
     logAutoScroll: true,
+    showAllReleases: false,
   };
   let newVoiceSample = null;
   let newVoiceSampleUrl = "";
@@ -502,8 +503,12 @@
   }
 
   function activateSettingsSection(sectionId, behavior = "smooth") {
-    $$(`[data-settings-anchor]`).forEach((button) => button.classList.toggle("active", button.dataset.settingsAnchor === sectionId));
-    $(`#${sectionId}`)?.scrollIntoView({ behavior, block: "start" });
+    $$(`[data-settings-anchor]`).forEach((button) => {
+      const active = button.dataset.settingsAnchor === sectionId;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "location"); else button.removeAttribute("aria-current");
+    });
+    $(`#${sectionId}`)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : behavior, block: "start" });
   }
 
   function focusLicenseSettings() {
@@ -1092,6 +1097,52 @@
     renderLicenseStatus();
     renderUpdateStatus();
     renderAuthPlatforms();
+    renderProductGuide();
+    renderReleaseTimeline();
+  }
+
+  function renderProductGuide() {
+    const features = window.clipportProductInfo?.features || [];
+    $("#productGuide").replaceChildren(...features.map((feature) => {
+      const row = element("li", "product-guide-item");
+      const symbol = append(element("span", "product-guide-icon"), icon(feature.icon));
+      const copy = append(element("div", "product-guide-copy"), element("h3", "", feature.title));
+      for (const text of feature.items) copy.append(element("p", "", text));
+      return append(row, symbol, copy);
+    }));
+    refreshIcons();
+  }
+
+  function renderReleaseTimeline() {
+    const releases = window.clipportProductInfo?.releases || [];
+    const labels = { added: "新增", fixed: "修复", improved: "优化" };
+    const visibleCount = 5;
+    $("#releaseCount").textContent = `${releases.filter((entry) => entry.version !== "development").length} 个已发布版本`;
+    const rows = releases.map((release, index) => {
+      const development = release.version === "development";
+      const current = !development && release.version === state.appVersion;
+      const row = element("li", `release-item${index === 0 ? " latest" : ""}`);
+      const heading = append(element("div", "release-heading"), element("h3", "", development ? "开发版本" : `v${release.version}`));
+      if (development || current) heading.append(element("span", "release-current", development ? "开发中" : "当前版本"));
+      if (release.date) {
+        const date = element("time", "release-date", release.date.replaceAll("-", "/"));
+        date.dateTime = release.date;
+        heading.append(date);
+      }
+      const changes = element("ul", "release-changes");
+      for (const change of release.changes) {
+        changes.append(append(element("li", "release-change"), element("span", `release-change-type ${change.type}`, labels[change.type]), element("span", "", change.text)));
+      }
+      return append(row, heading, element("p", "release-summary", release.title), changes);
+    });
+    $("#releaseTimeline").replaceChildren(...rows.slice(0, visibleCount));
+    $("#releaseOlderTimeline").replaceChildren(...rows.slice(visibleCount));
+    $("#releaseOlderTimeline").hidden = !state.showAllReleases;
+    const toggle = $("#toggleReleaseHistory");
+    toggle.hidden = releases.length <= visibleCount;
+    toggle.setAttribute("aria-expanded", String(state.showAllReleases));
+    toggle.replaceChildren(icon(state.showAllReleases ? "chevrons-up" : "chevrons-down"), document.createTextNode(state.showAllReleases ? "收起早期版本" : `查看更早版本（${Math.max(0, releases.length - visibleCount)}）`));
+    refreshIcons();
   }
 
   function renderDiagnosticLogs() {
@@ -2188,6 +2239,10 @@
   }
 
   function bindEvents() {
+    $("#toggleReleaseHistory").addEventListener("click", () => {
+      state.showAllReleases = !state.showAllReleases;
+      renderReleaseTimeline();
+    });
     document.addEventListener("click", (event) => {
       const nav = event.target.closest("[data-nav]"); if (nav) showView(nav.dataset.nav);
       const filter = event.target.closest("[data-task-filter]"); if (filter) { state.taskFilter = filter.dataset.taskFilter; renderTasks(); }

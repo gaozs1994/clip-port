@@ -7,10 +7,10 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "prepare:renderer": "node scripts/vendor-assets.cjs",
+    "prepare:renderer": "node scripts/vendor-assets.cjs && node scripts/prepare-product-info.cjs",
     "prepare:ytdlp": "node scripts/prepare-ytdlp.cjs",
     "prepare:voicebox": "node scripts/prepare-voicebox.cjs",
-    "postinstall": "node scripts/vendor-assets.cjs",
+    "postinstall": "npm run prepare:renderer",
     "start": "npm run prepare:renderer && electron .",
     "dev": "npm start",
     "smoke": "npm run prepare:renderer && electron scripts/electron-smoke.cjs",

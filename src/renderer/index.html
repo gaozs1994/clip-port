@@ -188,7 +188,7 @@
           <section class="view" id="settingsView" data-view="settings" aria-labelledby="settingsTitle" hidden>
             <div class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="settingsTitle">设置</h1></div><span class="autosave-label"><i data-lucide="check"></i>自动保存</span></div>
             <div class="settings-layout">
-              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="licenseSettings">设备授权</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="aboutSettings">关于</button></nav>
+              <nav class="settings-nav" aria-label="设置分类"><button class="active" type="button" data-settings-anchor="downloadSettings" aria-current="location">下载</button><button type="button" data-settings-anchor="authSettings">登录状态</button><button type="button" data-settings-anchor="licenseSettings">设备授权</button><button type="button" data-settings-anchor="appearanceSettings">外观</button><button type="button" data-settings-anchor="aboutSettings">关于</button><button type="button" data-settings-anchor="guideSettings">功能说明</button><button type="button" data-settings-anchor="releaseSettings">更新记录</button></nav>
               <div class="settings-content">
                 <section class="settings-group" id="downloadSettings" aria-labelledby="generalSettings"><div class="settings-heading"><h2 id="generalSettings">下载偏好</h2><p>应用于之后创建的任务</p></div><div class="setting-row"><div><strong>默认保存位置</strong><span id="settingsDirectory">--</span></div><button class="secondary-button compact" type="button" id="chooseDirectory">更改</button></div><label class="setting-row"><div><strong>同时下载任务</strong><span>并发数越高，对网络与磁盘占用越大</span></div><select id="concurrencySelect"><option value="1">1 个任务</option><option value="2">2 个任务</option><option value="3">3 个任务</option></select></label></section>
                 <section class="settings-group" id="authSettings" aria-labelledby="authTitle"><div class="settings-heading"><div><h2 id="authTitle">平台登录</h2><p>各平台使用独立会话</p></div><span class="auth-summary" id="authSummary">0 个平台已连接</span></div><div class="auth-privacy"><i data-lucide="shield-check"></i><span>登录页面与主应用隔离；ClipPort 不读取密码，Cookie 仅保存在本机。</span></div><div class="platform-list" id="authPlatformList" aria-live="polite"></div></section>
@@ -209,6 +209,17 @@
                 </section>
                 <section class="settings-group" id="appearanceSettings" aria-labelledby="appearanceTitle"><div class="settings-heading"><h2 id="appearanceTitle">外观</h2></div><label class="setting-row"><div><strong>主题</strong><span>可跟随操作系统显示模式</span></div><select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label></section>
                 <section class="settings-group app-info" id="aboutSettings"><div class="settings-heading"><h2>关于 ClipPort</h2></div><div class="setting-row"><div><strong>应用版本</strong><span id="appVersion">--</span></div><span>本地解析与媒体处理</span></div><div class="tool-row update-row"><span class="tool-icon blue"><i data-lucide="refresh-cw"></i></span><div><strong>应用更新</strong><span id="updateStatus" role="status" aria-live="polite">正在读取更新状态</span><div class="update-inline-progress" id="updateInlineProgress" hidden><div class="update-progress-track" role="progressbar" aria-label="安装包下载进度" aria-valuemin="0" aria-valuemax="100"><span id="updateInlineBar"></span></div><small id="updateInlineMeta">0%</small></div></div><div class="tool-actions"><button class="secondary-button compact" id="checkUpdates" type="button"><i data-lucide="search"></i><span>检查更新</span></button></div></div></section>
+                <section class="settings-group" id="guideSettings" aria-labelledby="guideTitle">
+                  <div class="settings-heading"><h2 id="guideTitle">功能说明</h2></div>
+                  <ul class="product-guide" id="productGuide"></ul>
+                  <p class="product-guide-notice">请仅下载、录制和使用你有权使用的媒体与声音，并遵守平台条款。</p>
+                </section>
+                <section class="settings-group" id="releaseSettings" aria-labelledby="releaseTitle">
+                  <div class="settings-heading release-section-heading"><h2 id="releaseTitle">更新记录</h2><span id="releaseCount"></span></div>
+                  <ol class="release-timeline" id="releaseTimeline" aria-label="版本更新时间轴"></ol>
+                  <button class="secondary-button compact release-history-toggle" id="toggleReleaseHistory" type="button" aria-expanded="false" aria-controls="releaseOlderTimeline"><i data-lucide="chevrons-down"></i><span>查看更早版本</span></button>
+                  <ol class="release-timeline release-older-timeline" id="releaseOlderTimeline" start="6" aria-label="早期版本更新记录" hidden></ol>
+                </section>
                 <section class="settings-group author-contact" aria-labelledby="authorContactTitle">
                   <div class="settings-heading"><div><h2 id="authorContactTitle">联系作者</h2><p>使用微信扫描二维码添加好友</p></div></div>
                   <div class="author-contact-content">
@@ -287,6 +298,7 @@
     <div class="update-download-status" id="updateDownloadStatus" role="status" aria-live="polite" aria-atomic="true" hidden><span class="update-download-icon"><i data-lucide="download"></i></span><div><div class="update-download-heading"><strong id="updateDownloadTitle">正在下载安装包</strong><b id="updateDownloadPercent">0%</b></div><div class="update-progress-track" id="updateDownloadTrack" role="progressbar" aria-label="安装包下载进度" aria-valuemin="0" aria-valuemax="100"><span id="updateDownloadBar"></span></div><small id="updateDownloadMeta">正在准备下载</small></div></div>
     <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"><span class="toast-icon"><i data-lucide="circle-check"></i></span><span><strong id="toastTitle">操作完成</strong><small id="toastMessage"></small></span><button class="icon-button" type="button" id="closeToast" aria-label="关闭通知"><i data-lucide="x"></i></button></div>
     <script src="./vendor/lucide.min.js"></script>
+    <script src="./product-info.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

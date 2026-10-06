@@ -18,9 +18,16 @@ ClipPort 是一款基于 Electron、yt-dlp、FFmpeg/ffprobe 和 Voicebox 的本�
 - 内置 Voicebox CPU 服务：10 款语音模型目录与按需下载、预设/克隆声音档案、23 种语言、生成进度、试听、取消与 WAV 保存
 - Voicebox 风格的实时诊断日志页、自动跟随、自动脱敏与本地导出
 - Windows 设备码与 Ed25519 离线授权
+- 设置页提供功能说明和版本更新时间轴，可离线查看每版新增功能、修复问题与发布日期
 
 首版暂不支持播放列表逐项选择和直播下载。
 平台登录页运行在独立、无 Node 权限的受限窗口中。ClipPort 不读取账号密码；Cookie 保存在对应平台的本机会话中，仅在匹配平台的 yt-dlp 进程运行期间导出为临时文件并随即删除。部分平台可能限制 Electron 登录，实际可用性以平台页面和当前 yt-dlp 版本为准。
+
+## 版本说明维护
+
+功能说明与历史记录维护在 `docs/product-info.json`。每次功能变更更新其中的 `upcoming`，使用 `added`（新增）、`fixed`（修复）或 `improved`（优化）分类，不需要手动填写下一版版本号。
+
+`npm run prepare:renderer` 生成随安装包携带的本地展示数据。GitHub Actions 发布时自动填入实际版本号与 UTC 发布日期，合并上一版 Release 中的 `release-notes.json` 历史快照，并生成中文 Release 说明。旧版本没有快照时使用已核对的历史记录；网络失败时构建会报错，避免悄悄丢失记录。本地开发只标记为“开发版本”，不会伪造已发布版本。
 
 ## 本地运行
 

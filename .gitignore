@@ -2,6 +2,7 @@ node_modules/
 dist/
 .playwright-cli/
 output/
+src/renderer/product-info.js
 tools/
 vendor/yt-dlp/
 vendor/voicebox/
