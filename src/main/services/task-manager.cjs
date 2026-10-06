@@ -18,6 +18,8 @@ const {
 const { buildDownloadArgs, classifyError, parseProgressLine } = require("./yt-dlp.cjs");
 const { buildYtDlpInfo, isDouyinUrl } = require("./douyin-resolver.cjs");
 const { collectPackageFiles, createZipArchive, nextArchivePath, safeArchiveName } = require("./archive.cjs");
+const { detectPlatform } = require("./cookie-manager.cjs");
+const { prepareImagePackage } = require("./xiaohongshu-images.cjs");
 
 function now() {
   return new Date().toISOString();
@@ -77,7 +79,7 @@ function mediaProbeTarget(files = []) {
 }
 
 class TaskManager {
-  constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, canStartTask = () => true, onTaskChanged, onHistoryChanged }) {
+  constructor({ store, toolchain, safeStorage, cookieManager, douyinResolver, canStartTask = () => true, onTaskChanged, onHistoryChanged, spawnProcess = spawnWithLines }) {
     this.store = store;
     this.toolchain = toolchain;
     this.safeStorage = safeStorage;
@@ -86,6 +88,7 @@ class TaskManager {
     this.canStartTask = canStartTask;
     this.onTaskChanged = onTaskChanged;
     this.onHistoryChanged = onHistoryChanged;
+    this.spawnProcess = spawnProcess;
     this.running = new Map();
     this.launching = new Set();
     this.urls = new Map();
@@ -137,6 +140,11 @@ class TaskManager {
     if (typeof media.id !== "string" || typeof media.title !== "string") {
       throw new AppError("INVALID_MEDIA", "请先解析媒体链接");
     }
+    const imageNote = media.contentType === "images" && detectPlatform(sourceUrl)?.id === "xiaohongshu";
+    if (media.contentType === "images" && (!imageNote || !Number.isInteger(media.imageCount) || media.imageCount < 1 || media.imageCount > 1000)) {
+      throw new AppError("INVALID_MEDIA", "图片信息无效，请重新解析小红书链接");
+    }
+    if (imageNote) options.resolution = "best";
 
     const task = {
       id: crypto.randomUUID(),
@@ -151,8 +159,10 @@ class TaskManager {
         extractor: String(media.extractor || "unknown").slice(0, 100),
         duration: Number.isFinite(media.duration) ? media.duration : null,
         estimatedBytes: Number.isFinite(media.best?.estimatedBytes) && media.best.estimatedBytes > 0 ? media.best.estimatedBytes : null,
+        contentType: imageNote ? "images" : "video",
+        imageCount: imageNote ? media.imageCount : 0,
       },
-      downloadStrategy: media.downloadStrategy === "douyin-share" && isDouyinUrl(sourceUrl) ? "douyin-share" : "",
+      downloadStrategy: imageNote ? "xiaohongshu-images" : media.downloadStrategy === "douyin-share" && isDouyinUrl(sourceUrl) ? "douyin-share" : "",
       redactedUrl: redactUrl(sourceUrl),
       urlFingerprint: fingerprintUrl(sourceUrl),
       sourceUrlEncrypted: this.#encrypt(sourceUrl),
@@ -260,14 +270,16 @@ class TaskManager {
       }
     }
     const runtimeTask = { ...task, sourceUrl, infoJsonPath, packageDirectory: stagingDirectory };
-    const context = { reason: "", outputPaths: [], log: "", lastProgressAt: 0, tools, child: null, completion: null };
+    const context = { reason: "", outputPaths: [], imageThumbnails: [], log: "", lastProgressAt: 0, tools, child: null, completion: null };
     const consume = (line) => {
       const event = parseProgressLine(line);
       if (!event) {
         context.log = tail(`${context.log}${line}\n`);
         return;
       }
-      if (event.type === "output" && typeof event.value === "string") {
+      if (event.type === "images") {
+        context.imageThumbnails = event.value;
+      } else if (event.type === "output" && typeof event.value === "string") {
         context.outputPaths.push(event.value);
       } else if (event.type === "postprocess") {
         this.#save(task, { state: "processing", stage: "正在处理媒体" });
@@ -281,7 +293,7 @@ class TaskManager {
     };
     let processHandle;
     try {
-      processHandle = spawnWithLines(tools.ytDlpPath, buildDownloadArgs(runtimeTask, { ...tools, ...(authContext || {}) }), {
+      processHandle = this.spawnProcess(tools.ytDlpPath, buildDownloadArgs(runtimeTask, { ...tools, ...(authContext || {}) }), {
         cwd: task.outputRoot,
         onStdoutLine: consume,
         onStderrLine: consume,
@@ -299,6 +311,7 @@ class TaskManager {
     Object.assign(context, processHandle);
     this.running.set(task.id, context);
     this.launching.delete(task.id);
+    if (task.media.contentType === "images") this.#save(task, { state: "downloading", stage: "正在下载图片", progress: { ...task.progress, percent: null } });
 
     try {
       const result = await processHandle.completion;
@@ -324,7 +337,7 @@ class TaskManager {
     } catch (error) {
       this.#save(task, {
         state: "failed",
-        stage: error.code === "PACKAGE_EMPTY" ? "未找到可打包的媒体文件" : "下载任务执行失败",
+        stage: error.code === "PACKAGE_EMPTY" ? "未找到可打包的媒体文件" : error.code === "IMAGE_DOWNLOAD_INCOMPLETE" ? error.message : "下载任务执行失败",
         error: { code: error.code || "PROCESS_ERROR", message: error.message },
       });
     } finally {
@@ -337,12 +350,14 @@ class TaskManager {
 
   async #complete(task, context) {
     const stagingDirectory = packageDirectory(task);
-    const packageFiles = collectPackageFiles(stagingDirectory);
-    const mediaOutput = mediaProbeTarget(packageFiles.length ? packageFiles : context.outputPaths.map((value) => path.resolve(value)));
+    const imageNote = task.media.contentType === "images";
+    const sourceDirectory = imageNote ? prepareImagePackage(stagingDirectory, context.imageThumbnails, task.media.imageCount) : stagingDirectory;
+    const packageFiles = collectPackageFiles(sourceDirectory);
+    const mediaOutput = imageNote ? "" : mediaProbeTarget(packageFiles.length ? packageFiles : context.outputPaths.map((value) => path.resolve(value)));
     this.#save(task, { state: "verifying", stage: "正在校验媒体包", finalOutputs: [] });
     let probe = null;
     if (mediaOutput) {
-      const handle = spawnWithLines(context.tools.ffprobePath, ["-v", "error", "-show_format", "-show_streams", "-of", "json", mediaOutput]);
+      const handle = this.spawnProcess(context.tools.ffprobePath, ["-v", "error", "-show_format", "-show_streams", "-of", "json", mediaOutput]);
       const result = await handle.completion;
       if (result.code === 0) {
         try {
@@ -352,10 +367,10 @@ class TaskManager {
         }
       }
     }
-    const resolutionLabel = task.options.resolution === "best" ? "best" : `${task.options.resolution}p`;
+    const resolutionLabel = imageNote ? "images" : task.options.resolution === "best" ? "best" : `${task.options.resolution}p`;
     const archiveStem = `${safeArchiveName(task.media.title)} [${task.media.id || task.id}] ${resolutionLabel}`;
     const archivePath = nextArchivePath(task.outputRoot, archiveStem);
-    const archive = await createZipArchive({ sourceDirectory: stagingDirectory, archivePath });
+    const archive = await createZipArchive({ sourceDirectory, archivePath });
     fs.rmSync(stagingDirectory, { recursive: true, force: true });
     const outputs = [archive.archivePath];
     const completedAt = now();
@@ -383,6 +398,8 @@ class TaskManager {
       uploader: task.media.uploader,
       extractor: task.media.extractor,
       mediaId: task.media.id,
+      contentType: task.media.contentType,
+      imageCount: task.media.imageCount,
       result: outputs.length ? "completed" : "partial",
       completedAt,
       outputs,

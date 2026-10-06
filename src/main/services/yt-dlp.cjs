@@ -1,10 +1,12 @@
 const path = require("node:path");
 const { AppError } = require("./validators.cjs");
 const { detectPlatform } = require("./cookie-manager.cjs");
+const { selectXiaohongshuImages } = require("./xiaohongshu-images.cjs");
 
 const PROGRESS_PREFIX = "CLIPPORT_PROGRESS|";
 const OUTPUT_PREFIX = "CLIPPORT_OUTPUT:";
 const POST_PREFIX = "CLIPPORT_POST:";
+const IMAGE_PREFIX = "CLIPPORT_IMAGES:";
 
 function optionalFfmpegArgs(ffmpegPath) {
   return ffmpegPath ? ["--ffmpeg-location", path.dirname(ffmpegPath)] : [];
@@ -24,6 +26,7 @@ function buildParseArgs({ url, ffmpegPath, cookieFile, userAgent }) {
     "--no-playlist",
     "--skip-download",
     "--dump-single-json",
+    ...(detectPlatform(url)?.id === "xiaohongshu" ? ["--ignore-no-formats-error"] : []),
     ...optionalFfmpegArgs(ffmpegPath),
     ...optionalAuthArgs({ cookieFile, userAgent }),
     "--",
@@ -65,6 +68,17 @@ function buildDownloadArgs(task, { ffmpegPath, cookieFile, userAgent }) {
     ...optionalAuthArgs({ cookieFile, userAgent }),
   ];
 
+  if (task.downloadStrategy === "xiaohongshu-images") {
+    args.push(
+      "--ignore-no-formats-error", "--skip-download", "--no-simulate", "--write-all-thumbnails",
+      "--convert-thumbnails", "png",
+      "--print", `after_video:${IMAGE_PREFIX}%(thumbnails)j`,
+    );
+    if (task.infoJsonPath) args.push("--load-info-json", task.infoJsonPath);
+    else args.push("--", task.sourceUrl);
+    return args;
+  }
+
   args.push(
     "--format", formatSelector(options),
     "--merge-output-format", "mp4",
@@ -92,6 +106,14 @@ function parseNumber(value) {
 }
 
 function parseProgressLine(line) {
+  if (line.startsWith(IMAGE_PREFIX)) {
+    try {
+      const thumbnails = JSON.parse(line.slice(IMAGE_PREFIX.length));
+      return Array.isArray(thumbnails) ? { type: "images", value: thumbnails } : null;
+    } catch {
+      return null;
+    }
+  }
   if (line.startsWith(PROGRESS_PREFIX)) {
     const [status, downloaded, total, estimate, speed, eta, percentText] = line.slice(PROGRESS_PREFIX.length).split("|");
     const totalBytes = parseNumber(total) || parseNumber(estimate);
@@ -142,7 +164,10 @@ function classifyError(stderr = "") {
   if (/unsupported url|no suitable extractor/.test(text)) {
     return new AppError("UNSUPPORTED_URL", "暂不支持这个链接", stderr);
   }
-  if (/requested format.*not available|no video formats/.test(text)) {
+  if (/no video formats/.test(text)) {
+    return new AppError("NO_VIDEO_FORMATS", "未找到可下载的媒体，请使用完整分享链接重试，或确认内容仍可访问", stderr);
+  }
+  if (/requested format.*not available/.test(text)) {
     return new AppError("FORMAT_UNAVAILABLE", "该视频不支持所选分辨率", stderr);
   }
   if (/disk full|no space left/.test(text)) {
@@ -167,6 +192,8 @@ function codecName(value) {
 
 function normalizeInfo(info, thumbnailDataUrl = "") {
   const formats = Array.isArray(info.formats) ? info.formats : [];
+  const isXiaohongshu = /^XiaoHongShu$/i.test(info.extractor_key || info.extractor || "");
+  const images = isXiaohongshu && !formats.length ? selectXiaohongshuImages(info.thumbnails) : [];
   const videoFormats = formats.filter((format) => format.vcodec && format.vcodec !== "none");
   const best = videoFormats
     .slice()
@@ -186,6 +213,9 @@ function normalizeInfo(info, thumbnailDataUrl = "") {
     uploadDate: info.upload_date || "",
     webpageUrl: info.webpage_url || info.original_url || "",
     liveStatus: info.live_status || (info.is_live ? "is_live" : "not_live"),
+    contentType: images.length ? "images" : "video",
+    imageCount: images.length,
+    ...(images.length ? { downloadStrategy: "xiaohongshu-images" } : {}),
     thumbnailDataUrl,
     best: {
       height: best.height || null,

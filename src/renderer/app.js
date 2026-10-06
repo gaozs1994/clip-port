@@ -243,7 +243,7 @@
           clearInterval(timer);
           timer = null;
           task.finalOutputs = ["C:\\Users\\Public\\Downloads\\ClipPort\\demo.zip"];
-          const entry = { id: crypto.randomUUID(), taskId: task.id, title: task.media.title, uploader: task.media.uploader, extractor: task.media.extractor, result: "completed", completedAt: new Date().toISOString(), outputs: task.finalOutputs, options: task.options, probe: { format: { size: "1200000000" } } };
+          const entry = { id: crypto.randomUUID(), taskId: task.id, title: task.media.title, uploader: task.media.uploader, extractor: task.media.extractor, contentType: task.media.contentType, imageCount: task.media.imageCount, result: "completed", completedAt: new Date().toISOString(), outputs: task.finalOutputs, options: task.options, probe: { format: { size: "1200000000" } } };
           demoHistory.unshift(entry);
           listeners.history.forEach((callback) => callback(structuredClone(entry)));
         }
@@ -524,18 +524,28 @@
     $("#resultPanel").hidden = !media;
     $("#downloadBar").hidden = !media;
     if (!media) return;
-    $("#mediaDuration").textContent = formatDuration(media.duration);
+    const imageNote = media.contentType === "images";
+    $("#resultTitle").textContent = imageNote ? "图文笔记" : "选择视频分辨率";
+    $("#mediaDuration").textContent = imageNote ? `${media.imageCount} 张` : formatDuration(media.duration);
     $("#mediaExtractor").textContent = String(media.extractor || "MEDIA").toUpperCase().slice(0, 16);
     $("#mediaCreator").textContent = media.uploader || "未知来源";
     $("#mediaTitle").textContent = media.title || "未命名媒体";
     const date = /^\d{8}$/.test(media.uploadDate || "") ? `${media.uploadDate.slice(0, 4)}-${media.uploadDate.slice(4, 6)}-${media.uploadDate.slice(6, 8)}` : "发布日期未知";
-    $("#mediaDescription").textContent = `${date} · ${media.best?.container?.toUpperCase() || "格式未知"}`;
-    $("#mediaQuality").textContent = media.best?.height ? `${media.best.height}p${media.best.fps ? ` · ${media.best.fps}fps` : ""}` : "未知";
-    $("#mediaSubtitles").textContent = media.subtitleLanguages?.length ? media.subtitleLanguages.slice(0, 4).join("、") : "无可用字幕";
-    $("#mediaSize").textContent = media.best?.estimatedBytes ? `约 ${formatBytes(media.best.estimatedBytes)}` : "由下载格式决定";
+    $("#mediaDescription").textContent = `${date} · ${imageNote ? "图文" : media.best?.container?.toUpperCase() || "格式未知"}`;
+    $("#mediaQualityLabel").textContent = imageNote ? "图片数量" : "最高画质";
+    $("#mediaSubtitlesLabel").textContent = imageNote ? "文件格式" : "字幕";
+    $("#mediaQuality").textContent = imageNote ? `${media.imageCount} 张` : media.best?.height ? `${media.best.height}p${media.best.fps ? ` · ${media.best.fps}fps` : ""}` : "未知";
+    $("#mediaSubtitles").textContent = imageNote ? "PNG" : media.subtitleLanguages?.length ? media.subtitleLanguages.slice(0, 4).join("、") : "无可用字幕";
+    $("#mediaSize").textContent = media.best?.estimatedBytes ? `约 ${formatBytes(media.best.estimatedBytes)}` : imageNote ? "下载后确定" : "由下载格式决定";
+    $("#packageTitle").textContent = imageNote ? "图片包" : "完整媒体包";
+    $("#selectedPackage").textContent = imageNote ? "图片包" : "完整媒体包";
+    $("#packageDescription").textContent = imageNote ? "全部图片 · PNG" : "视频 · 独立音频 · 封面 · 可用字幕";
+    const assets = imageNote ? [["images", `${media.imageCount} 张图片`]] : [["file-video-2", "视频"], ["music-2", "音频"], ["image", "封面"], ["captions", "字幕"]];
+    $("#packageAssets").replaceChildren(...assets.map(([name, label]) => append(element("span"), icon(name), document.createTextNode(label))));
     const frame = $("#mediaThumbnail");
     frame.querySelector("img")?.remove();
     const placeholder = $(".thumbnail-placeholder", frame);
+    placeholder.replaceChildren(icon(imageNote ? "images" : "clapperboard"));
     if (media.thumbnailDataUrl) {
       const image = document.createElement("img");
       image.src = media.thumbnailDataUrl;
@@ -555,6 +565,14 @@
     const media = state.media;
     const select = $("#resolutionSelect");
     if (!select) return;
+    const imageNote = media?.contentType === "images";
+    $("#resolutionField").hidden = imageNote;
+    select.disabled = imageNote;
+    if (imageNote) {
+      state.selectedResolution = "best";
+      $("#selectedQuality").textContent = `${media.imageCount} 张图片`;
+      return;
+    }
     const heights = [...new Set((media?.availableHeights || [])
       .map((value) => Number(value))
       .filter((value) => Number.isInteger(value) && value > 0))].sort((a, b) => b - a);
@@ -798,6 +816,7 @@
   }
 
   function taskSubtitle(task) {
+    if (task.media?.contentType === "images") return `图片包 · ${task.media.imageCount} 张图片`;
     if (!isVoiceTask(task)) return `完整媒体包 · ${formatDuration(task.media?.duration)}`;
     const voice = task.voice || {};
     return ["语音生成", voice.profileName, VOICE_LANGUAGE_LABELS[voice.language] || voice.language].filter(Boolean).join(" · ");
@@ -827,7 +846,7 @@
     const voiceTask = isVoiceTask(task);
     const nameCell = element("div", "task-name-cell");
     const typeIcon = element("span", `file-type ${voiceTask ? "voice" : ["audio", "mp3"].includes(task.options?.preset) ? "blue" : ""}`);
-    typeIcon.append(icon(voiceTask ? "audio-lines" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : task.options?.preset === "subtitles" ? "captions" : "file-video-2"));
+    typeIcon.append(icon(voiceTask ? "audio-lines" : task.media?.contentType === "images" ? "images" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : task.options?.preset === "subtitles" ? "captions" : "file-video-2"));
     const title = element("span");
     append(title, element("strong", "", taskTitle(task)), element("small", "", taskSubtitle(task)));
     append(nameCell, typeIcon, title);
@@ -836,10 +855,10 @@
     const statusLine = element("div");
     const percent = Number(task.progress?.percent) || 0;
     const speedText = !voiceTask && task.state === "downloading"
-      ? task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"
+      ? task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : task.media?.contentType === "images" ? "正在下载图片" : "测速中"
       : task.stage || "";
     append(statusLine, element("span", task.state === "failed" ? "status-error" : "", `${stateLabel(task)}${!voiceTask && task.state === "downloading" ? ` · ${percent.toFixed(0)}%` : ""}`), element("span", "", speedText));
-    const indeterminate = task.state === "processing" || task.state === "verifying" || (voiceTask && ACTIVE_STATES.has(task.state) && task.progress?.percent == null);
+    const indeterminate = task.state === "processing" || task.state === "verifying" || ((voiceTask || task.media?.contentType === "images") && ACTIVE_STATES.has(task.state) && task.progress?.percent == null);
     const progress = element("div", `progress-track${indeterminate ? " processing" : ""}`);
     const value = element("span");
     if (!progress.classList.contains("processing")) value.style.width = `${Math.max(0, Math.min(100, percent))}%`;
@@ -927,9 +946,9 @@
     const voiceTask = isVoiceTask(task);
     const head = element("div", "queue-task-head");
     const thumb = element("span", `mini-thumb graphic-thumb ${voiceTask || ["audio", "mp3"].includes(task.options?.preset) ? "navy" : ""}`);
-    thumb.append(icon(voiceTask ? "audio-lines" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : "download"));
+    thumb.append(icon(voiceTask ? "audio-lines" : task.media?.contentType === "images" ? "images" : ["audio", "mp3"].includes(task.options?.preset) ? "music-2" : "download"));
     const copy = element("span", "queue-task-copy");
-    const queueSpeed = !voiceTask && task.state === "downloading" ? ` · ${task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : "测速中"}` : "";
+    const queueSpeed = !voiceTask && task.state === "downloading" ? ` · ${task.progress?.speed ? `${formatBytes(task.progress.speed)}/s` : task.media?.contentType === "images" ? "正在下载图片" : "测速中"}` : "";
     append(copy, element("strong", "", taskTitle(task)), element("small", "", `${stateLabel(task)}${queueSpeed}`));
     const action = voiceTask
       ? createIconButton("x", "取消语音任务", "cancel", task.id)
@@ -950,8 +969,8 @@
         : downloadedBytes
           ? `已下载 ${formatBytes(downloadedBytes)}`
           : task.stage || "等待中";
-    append(meta, element("span", "", voiceTask ? "语音" : `${Math.round(task.progress?.percent || 0)}%`), element("span", "", sizeText));
-    const track = element("div", `progress-track${task.state === "processing" || task.state === "verifying" || (voiceTask && ACTIVE_STATES.has(task.state)) ? " processing" : ""}`);
+    append(meta, element("span", "", voiceTask ? "语音" : task.media?.contentType === "images" && task.progress?.percent == null ? `${task.media.imageCount} 张图片` : `${Math.round(task.progress?.percent || 0)}%`), element("span", "", sizeText));
+    const track = element("div", `progress-track${task.state === "processing" || task.state === "verifying" || ((voiceTask || task.media?.contentType === "images" && task.progress?.percent == null) && ACTIVE_STATES.has(task.state)) ? " processing" : ""}`);
     const value = element("span"); value.style.width = `${Math.max(0, Math.min(100, task.progress?.percent || 0))}%`; track.append(value);
     append(row, head, meta, track);
     return row;
@@ -977,9 +996,9 @@
   function createHistoryRow(entry) {
     const row = element("article", "history-row");
     const thumb = element("span", `history-thumb graphic-thumb ${["audio", "mp3"].includes(entry.options?.preset) ? "navy" : ""}`);
-    thumb.append(icon(["audio", "mp3"].includes(entry.options?.preset) ? "music-2" : entry.options?.preset === "subtitles" ? "captions" : "file-video-2"));
+    thumb.append(icon(entry.contentType === "images" ? "images" : ["audio", "mp3"].includes(entry.options?.preset) ? "music-2" : entry.options?.preset === "subtitles" ? "captions" : "file-video-2"));
     const main = element("div", "history-main"); append(main, element("strong", "", entry.title || "未命名媒体"), element("span", "", `${entry.uploader || "未知来源"} · ${formatDate(entry.completedAt)}`));
-    const format = element("div", "history-format"); append(format, element("strong", "", "完整媒体包"), element("span", "", historySize(entry)));
+    const format = element("div", "history-format"); append(format, element("strong", "", entry.contentType === "images" ? "图片包" : "完整媒体包"), element("span", "", entry.contentType === "images" ? `${entry.imageCount} 张图片` : historySize(entry)));
     const status = element("span", "completed-state"); append(status, icon(entry.result === "completed" ? "circle-check" : "circle-alert"), document.createTextNode(entry.result === "completed" ? "已完成" : "部分完成"));
     const actions = element("div", "history-actions");
     const open = element("button", "secondary-button compact"); open.type = "button"; open.dataset.historyAction = "open"; open.dataset.historyId = entry.id; append(open, icon("play"), element("span", "", "打开"));
@@ -1351,7 +1370,7 @@
       state.selectedResolution = "best";
       renderMedia();
       const recognizedFromText = Boolean(state.media.resolvedUrl && state.media.resolvedUrl !== url);
-      $("#parseHint").replaceChildren(append(element("span"), icon("circle-check"), document.createTextNode(recognizedFromText ? "已从分享内容识别链接并完成解析" : "已识别单个媒体")));
+      $("#parseHint").replaceChildren(append(element("span"), icon("circle-check"), document.createTextNode(state.media.contentType === "images" ? `已识别图文笔记 · ${state.media.imageCount} 张图片` : recognizedFromText ? "已从分享内容识别链接并完成解析" : "已识别单个媒体")));
     } catch (error) {
       state.media = null;
       renderMedia();
@@ -1382,7 +1401,7 @@
   function taskOptions() {
     return {
       preset: "package",
-      resolution: $("#resolutionSelect").value || "best",
+      resolution: state.media?.contentType === "images" ? "best" : $("#resolutionSelect").value || "best",
       container: "mp4",
       fps: "60",
       embedThumbnail: true,

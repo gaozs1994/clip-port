@@ -34,6 +34,15 @@ test("redacts sensitive query parameters and blocks canonical persistence", () =
   assert.equal(canPersistCanonicalUrl("https://example.com/watch?v=abc"), true);
 });
 
+test("keeps Xiaohongshu share tokens usable for extraction but out of public records", () => {
+  const share = "小红书 https://www.xiaohongshu.com/explore/note?xsec_token=private&xsec_source=pc_share";
+  const url = extractHttpUrl(share);
+  assert.equal(new URL(url).searchParams.get("xsec_token"), "private");
+  assert.equal(new URL(redactUrl(url)).searchParams.get("xsec_token"), "REDACTED");
+  assert.equal(new URL(redactUrl(url)).searchParams.get("xsec_source"), "pc_share");
+  assert.equal(canPersistCanonicalUrl(url), false);
+});
+
 test("normalizes task options to the complete media package contract", () => {
   assert.deepEqual(sanitizeTaskOptions({ preset: "mp3", resolution: "2160", audioQuality: "320", subtitleLanguages: ["zh-Hans", "../bad"] }), {
     preset: "package",

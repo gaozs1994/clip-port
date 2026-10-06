@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const path = require("node:path");
 
-const SENSITIVE_QUERY_KEYS = /^(?:access_token|auth|authorization|cookie|expires?|key|policy|signature|sig|token|x-amz-.+)$/i;
+const SENSITIVE_QUERY_KEYS = /^(?:access_token|auth|authorization|cookie|expires?|key|policy|signature|sig|token|xsec_token|x-amz-.+)$/i;
 const ACTIVE_TASK_STATES = new Set(["preparing", "downloading", "processing", "verifying", "pausing", "canceling"]);
 const TASK_STATES = new Set([
   "queued",

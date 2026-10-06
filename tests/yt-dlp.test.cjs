@@ -19,6 +19,63 @@ test("parse arguments isolate the URL after an option terminator", () => {
   assert.equal(args[args.indexOf("--user-agent") + 1], "ClipPort Test");
 });
 
+test("allows Xiaohongshu image metadata without hiding missing formats on other platforms", () => {
+  for (const url of ["https://www.xiaohongshu.com/explore/example", "https://xhslink.com/a/example"]) {
+    assert.ok(buildParseArgs({ url }).includes("--ignore-no-formats-error"));
+  }
+  assert.equal(buildParseArgs({ url: "https://www.bilibili.com/video/example" }).includes("--ignore-no-formats-error"), false);
+});
+
+test("distinguishes absent video content from an unavailable resolution", () => {
+  const empty = classifyError("ERROR: [XiaoHongShu] example: No video formats found!");
+  assert.equal(empty.code, "NO_VIDEO_FORMATS");
+  assert.doesNotMatch(empty.message, /分辨率/);
+  assert.equal(classifyError("ERROR: Requested format is not available").code, "FORMAT_UNAVAILABLE");
+});
+
+test("downloads image notes without video, audio or subtitle processing", () => {
+  const args = buildDownloadArgs({
+    sourceUrl: "https://www.xiaohongshu.com/explore/example",
+    outputRoot: path.resolve("downloads"),
+    downloadStrategy: "xiaohongshu-images",
+    options: { resolution: "1080", subtitleLanguages: [] },
+  }, {});
+  for (const flag of ["--skip-download", "--ignore-no-formats-error", "--write-all-thumbnails", "--no-simulate"]) {
+    assert.ok(args.includes(flag), flag);
+  }
+  for (const flag of ["--format", "--extract-audio", "--write-subs", "--convert-subs"]) {
+    assert.equal(args.includes(flag), false, flag);
+  }
+  assert.equal(args[args.indexOf("--convert-thumbnails") + 1], "png");
+});
+
+test("recognizes image notes and counts distinct images instead of preview variants", () => {
+  const info = {
+    id: "note", title: "Photo note", extractor_key: "XiaoHongShu", formats: [],
+    thumbnails: [
+      { url: "https://sns-webpic-qc.xhscdn.com/spectrum/one!nd_prv_webp", width: 1080, height: 1440 },
+      { url: "https://sns-webpic-bd.xhscdn.com/spectrum/one!nd_dft_webp", width: 1080, height: 1440 },
+      { url: "https://sns-webpic-qc.xhscdn.com/spectrum/two!nd_dft_webp", width: 1080, height: 1440 },
+    ],
+  };
+  const images = normalizeInfo(info);
+  assert.equal(images.contentType, "images");
+  assert.equal(images.imageCount, 2);
+  assert.equal(images.downloadStrategy, "xiaohongshu-images");
+  assert.deepEqual(images.availableHeights, []);
+  assert.equal(Object.hasOwn(images, "thumbnails"), false);
+  const video = normalizeInfo({ ...info, formats: [{ url: "https://example.com/video", height: 1080, vcodec: "avc1", ext: "mp4" }] });
+  assert.equal(video.contentType, "video");
+  assert.notEqual(video.downloadStrategy, "xiaohongshu-images");
+});
+
+test("reads image completion data without treating it as a video output", () => {
+  const event = parseProgressLine('CLIPPORT_IMAGES:[{"filepath":"image.png"}]');
+  assert.equal(event.type, "images");
+  assert.deepEqual(event.value, [{ filepath: "image.png" }]);
+  assert.equal(parseProgressLine("CLIPPORT_IMAGES:not-json"), null);
+});
+
 test("classifies platform cookie challenges without invalidating login", () => {
   const error = classifyError("ERROR: [Douyin] Fresh cookies (not necessarily logged in) are needed");
   assert.equal(error.code, "COOKIE_CHALLENGE");

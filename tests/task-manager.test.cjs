@@ -129,3 +129,104 @@ test("download scheduling ignores queued voice tasks in the shared store", async
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("completes an image task as a ZIP without probing a nonexistent video", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-image-task-"));
+  let manager;
+  try {
+    const store = new AppStore({ userDataPath: directory, downloadsPath: directory });
+    let finished;
+    const completion = new Promise((resolve) => { finished = resolve; });
+    let spawnCount = 0;
+    manager = new TaskManager({
+      store,
+      toolchain: { requireReady: async () => ({ ytDlpPath: "yt-dlp", ffprobePath: "ffprobe", versions: {} }) },
+      safeStorage: { isEncryptionAvailable: () => false },
+      onHistoryChanged: finished,
+      spawnProcess(binary, args, options) {
+        spawnCount += 1;
+        assert.equal(binary, "yt-dlp");
+        assert.ok(args.includes("--write-all-thumbnails"));
+        const staging = path.dirname(args[args.indexOf("--output") + 1]);
+        return { child: {}, completion: Promise.resolve().then(() => {
+          const thumbnails = ["one", "two"].map((id) => {
+            const filepath = path.join(staging, `${id}.png`);
+            fs.writeFileSync(filepath, id);
+            return { url: `https://sns-webpic-qc.xhscdn.com/spectrum/${id}!nd_dft_webp`, filepath };
+          });
+          const line = `CLIPPORT_IMAGES:${JSON.stringify(thumbnails)}`;
+          options.onStdoutLine(line);
+          return { code: 0, stderr: "", stdout: line };
+        }) };
+      },
+    });
+    const task = manager.create({
+      url: "https://www.xiaohongshu.com/explore/note?xsec_token=private",
+      outputRoot: directory,
+      media: { id: "note", title: "Photo note", extractor: "XiaoHongShu", contentType: "images", imageCount: 2 },
+      options: { resolution: "1080" },
+    });
+    const history = await completion;
+    const completed = store.getTask(task.id);
+    assert.equal(completed.state, "completed");
+    assert.equal(completed.options.resolution, "best");
+    assert.equal(completed.media.contentType, "images");
+    assert.equal(completed.progress.percent, 100);
+    assert.ok(completed.progress.totalBytes > 0);
+    assert.equal(spawnCount, 1);
+    assert.equal(history.contentType, "images");
+    assert.equal(history.imageCount, 2);
+    assert.equal(history.probe, null);
+    assert.match(completed.finalOutputs[0], / images\.zip$/);
+    const zip = fs.readFileSync(completed.finalOutputs[0]);
+    assert.ok(zip.includes(Buffer.from("001.png")));
+    assert.ok(zip.includes(Buffer.from("002.png")));
+    assert.equal(fs.existsSync(path.join(directory, `.clipport-${task.id}`)), false);
+    assert.doesNotMatch(JSON.stringify(store.state), /xhscdn|private/);
+  } finally {
+    await manager?.shutdown();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("does not complete an image task when the downloader silently misses a picture", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-image-partial-"));
+  let manager;
+  try {
+    const store = new AppStore({ userDataPath: directory, downloadsPath: directory });
+    let failed;
+    const failure = new Promise((resolve) => { failed = resolve; });
+    manager = new TaskManager({
+      store,
+      toolchain: { requireReady: async () => ({ ytDlpPath: "yt-dlp" }) },
+      safeStorage: { isEncryptionAvailable: () => false },
+      onTaskChanged: (task) => { if (task.state === "failed") failed(task); },
+      spawnProcess: () => ({ child: {}, completion: Promise.resolve({ code: 0, stderr: "WARNING: Image download failed", stdout: "" }) }),
+    });
+    manager.create({
+      url: "https://xhslink.com/a/note",
+      outputRoot: directory,
+      media: { id: "note", title: "Photo note", contentType: "images", imageCount: 2 },
+    });
+    const task = await failure;
+    assert.equal(task.error.code, "IMAGE_DOWNLOAD_INCOMPLETE");
+    assert.equal(task.finalOutputs.length, 0);
+    assert.equal(fs.readdirSync(directory).some((name) => name.endsWith(".zip")), false);
+  } finally {
+    await manager?.shutdown();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("only accepts image tasks for Xiaohongshu with a positive image count", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "clipport-image-validation-"));
+  try {
+    const store = new AppStore({ userDataPath: directory, downloadsPath: directory });
+    const manager = new TaskManager({ store, toolchain: {}, canStartTask: () => false });
+    const media = { id: "note", title: "Photo note", contentType: "images", imageCount: 2 };
+    assert.throws(() => manager.create({ url: "https://example.com/note", media, outputRoot: directory }), { code: "INVALID_MEDIA" });
+    assert.throws(() => manager.create({ url: "https://xhslink.com/a/note", media: { ...media, imageCount: 0 }, outputRoot: directory }), { code: "INVALID_MEDIA" });
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
